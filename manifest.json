@@ -1,0 +1,13 @@
+{
+  "id": "bank_statement_converter",
+  "name": "Bank Statement Converter",
+  "version": "1.0.0",
+  "author": "Vishwas Upponi",
+  "category": "FINANCE & BANKING",
+  "entrypoint": "entrypoint.py",
+  "entry_class": "BankStatementConverterModule",
+  "ui_page": "web_ui/bank_converter.html",
+  "page_key": "bank_converter",
+  "description": "Extracts transactions from digital & scanned PDF bank statements into formatted Excel spreadsheets.",
+  "dependencies": ["pymupdf>=1.23.0", "pdfplumber>=0.10.0", "openpyxl>=3.1.0", "pandas>=2.0.0", "Pillow>=10.0.0", "numpy>=1.24.0"]
+}
