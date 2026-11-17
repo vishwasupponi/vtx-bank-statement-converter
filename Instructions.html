@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Statement Converter — User Guide & Instructions</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #000000;
+            --bg-card: rgba(18, 18, 20, 0.88);
+            --bg-card-hover: rgba(26, 26, 32, 0.96);
+            --card-border: rgba(255, 255, 255, 0.10);
+            --border-highlight: rgba(173, 202, 255, 0.55);
+            
+            --text-primary: #f5f6f9;
+            --text-secondary: #9da3b4;
+            --text-muted: #6b7280;
+
+            --accent-blue: rgb(173, 202, 255);
+            --accent-pink: rgb(255, 189, 236);
+            
+            --gradient-accent: linear-gradient(120deg, rgb(173, 202, 255), rgb(255, 189, 236));
+            --gradient-author: linear-gradient(120deg, rgb(173, 202, 255), rgb(255, 189, 236));
+            --gradient-vertex: linear-gradient(120deg, rgb(173, 202, 255), rgb(255, 189, 236));
+            
+            --card-shadow: 0 16px 36px rgba(0, 0, 0, 0.65);
+            --glow-primary: rgba(173, 202, 255, 0.25);
+            --glow-secondary: rgba(255, 189, 236, 0.35);
+
+            --radius-sm: 8px;
+            --radius-md: 16px;
+            --radius-lg: 24px;
+            --radius-full: 9999px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Lexend', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 10%, rgba(173, 202, 255, 0.09) 0%, transparent 45%),
+                radial-gradient(circle at 85% 25%, rgba(255, 189, 236, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 50% 85%, rgba(173, 202, 255, 0.06) 0%, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            line-height: 1.65;
+            padding: 60px 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 45px;
+            position: relative;
+        }
+
+        .hero-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(173, 202, 255, 0.08);
+            border: 1px solid rgba(173, 202, 255, 0.30);
+            color: var(--accent-blue);
+            padding: 6px 16px;
+            border-radius: var(--radius-full);
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            margin-bottom: 18px;
+            box-shadow: 0 0 15px rgba(173, 202, 255, 0.15);
+        }
+
+        .main-title {
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: -0.8px;
+            background: var(--gradient-accent);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+            line-height: 1.15;
+        }
+
+        .main-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.10rem;
+            max-width: 650px;
+            margin: 0 auto;
+        }
+
+        .nav-dock {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin: 35px 0 50px 0;
+            padding: 8px;
+            background: rgba(18, 18, 22, 0.7);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-full);
+            backdrop-filter: blur(16px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .nav-pill {
+            text-decoration: none;
+            color: var(--text-secondary);
+            padding: 9px 20px;
+            border-radius: var(--radius-full);
+            font-size: 0.88rem;
+            font-weight: 600;
+            transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-pill:hover {
+            color: #ffffff;
+            background: rgba(173, 202, 255, 0.14);
+            border-color: rgba(173, 202, 255, 0.35);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 14px var(--glow-primary);
+        }
+
+        .module-card {
+            background: var(--bg-card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-lg);
+            padding: 38px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(16px);
+            box-shadow: var(--card-shadow);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .module-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--gradient-accent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .module-card:hover {
+            border-color: var(--border-highlight);
+            transform: translateY(-3px);
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 25px rgba(173, 202, 255, 0.12);
+        }
+
+        .module-card:hover::before {
+            opacity: 1;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .card-title-group {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .card-icon {
+            width: 52px;
+            height: 52px;
+            background: rgba(173, 202, 255, 0.1);
+            border: 1px solid rgba(173, 202, 255, 0.30);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            box-shadow: 0 0 16px rgba(173, 202, 255, 0.12);
+        }
+
+        .card-title {
+            font-size: 1.55rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.3px;
+        }
+
+        .card-tag {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: var(--radius-full);
+            background: rgba(173, 202, 255, 0.12);
+            color: var(--accent-blue);
+            border: 1px solid rgba(173, 202, 255, 0.30);
+        }
+
+        .tag-ice { background: rgba(173, 202, 255, 0.12); color: var(--accent-blue); border: 1px solid rgba(173, 202, 255, 0.30); }
+        .tag-mint { background: rgba(255, 189, 236, 0.12); color: var(--accent-pink); border: 1px solid rgba(255, 189, 236, 0.30); }
+
+        .step-list {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+
+        .step-item {
+            position: relative;
+            padding-left: 52px;
+            margin-bottom: 24px;
+        }
+
+        .step-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .step-item::before {
+            counter-increment: step-counter;
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 2px;
+            width: 34px;
+            height: 34px;
+            background: rgba(173, 202, 255, 0.1);
+            color: var(--accent-blue);
+            border: 1px solid rgba(173, 202, 255, 0.35);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.92rem;
+            box-shadow: 0 0 10px rgba(173, 202, 255, 0.12);
+        }
+
+        .step-title {
+            font-size: 1.08rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+
+        .step-desc {
+            color: var(--text-secondary);
+            font-size: 0.96rem;
+            line-height: 1.6;
+        }
+
+        .step-desc b {
+            color: var(--text-primary);
+        }
+
+        .step-desc code {
+            font-family: 'Fira Code', monospace;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--accent-blue);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.88em;
+        }
+
+        .callout-box {
+            border-radius: var(--radius-md);
+            padding: 18px 22px;
+            margin-top: 24px;
+            font-size: 0.93rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            backdrop-filter: blur(8px);
+        }
+
+        .callout-tip {
+            background: rgba(173, 202, 255, 0.06);
+            border: 1px solid rgba(173, 202, 255, 0.25);
+            color: #e3f0ff;
+        }
+
+        .callout-info {
+            background: rgba(255, 189, 236, 0.06);
+            border: 1px solid rgba(255, 189, 236, 0.25);
+            color: #ffe8f8;
+        }
+
+        .callout-icon {
+            font-size: 1.35rem;
+            line-height: 1;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+            margin-top: 22px;
+        }
+
+        .feature-box {
+            background: rgba(10, 10, 14, 0.65);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            transition: all 0.2s ease;
+        }
+
+        .feature-box:hover {
+            border-color: rgba(173, 202, 255, 0.35);
+            background: rgba(18, 18, 24, 0.85);
+            transform: translateY(-2px);
+        }
+
+        .feature-box h4 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feature-box p {
+            font-size: 0.90rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .contact-section {
+            text-align: center;
+            margin-top: 50px;
+            margin-bottom: 20px;
+            padding: 32px 24px;
+            background: rgba(18, 18, 22, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(12px);
+        }
+
+        .contact-text {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .contact-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            background: linear-gradient(120deg, rgb(173, 202, 255), rgb(255, 189, 236));
+            color: #0b0c10;
+            font-weight: 700;
+            font-size: 0.96rem;
+            padding: 12px 30px;
+            border-radius: var(--radius-full);
+            box-shadow: 0 4px 20px rgba(173, 202, 255, 0.35);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .contact-btn:hover {
+            transform: translateY(-2px) scale(1.03);
+            box-shadow: 0 6px 30px rgba(255, 189, 236, 0.55), 0 0 20px rgba(173, 202, 255, 0.45);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid var(--card-border);
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .author-glow {
+            background: var(--gradient-author);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+
+        .vertex-glow {
+            background: var(--gradient-vertex);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <header>
+        <div class="hero-pill">🏦 Vertex Addon Module</div>
+        <h1 class="main-title">Bank Statement Converter</h1>
+        <p class="main-subtitle">User Guide & Instructions for extracting and parsing transactions from PDF statements into structured Excel workbooks.</p>
+        
+        <!-- QUICK NAVIGATION -->
+        <nav class="nav-dock">
+            <a href="#steps" class="nav-pill">🚀 Step-by-Step Guide</a>
+            <a href="#api-key" class="nav-pill">🔑 Gemini API Key</a>
+            <a href="#privacy" class="nav-pill">🔒 Privacy & Security</a>
+        </nav>
+    </header>
+
+    <!-- STEP-BY-STEP OPERATION -->
+    <section id="steps" class="module-card">
+        <div class="card-header">
+            <div class="card-title-group">
+                <div class="card-icon">🏦</div>
+                <div>
+                    <h2 class="card-title">How to Convert Statements</h2>
+                    <div style="font-size: 0.90rem; color: var(--text-secondary);">Extract, parse, and structure transactions from any PDF into Excel</div>
+                </div>
+            </div>
+            <span class="card-tag tag-ice">Smart Extraction</span>
+        </div>
+
+        <ul class="step-list">
+            <li class="step-item">
+                <div class="step-title">Select Bank Statements</div>
+                <div class="step-desc">Click <b>"Select Statements"</b> to choose one or more PDF bank statements (standard digital PDFs or scanned files).</div>
+            </li>
+            <li class="step-item">
+                <div class="step-title">Define Extraction Area (Interactive Tuning)</div>
+                <div class="step-desc">
+                    Click <b>"Define Extraction Area"</b> to visually inspect pages and frame transactions. This ensures bank letterheads, customer address blocks, notices, and summary footers are excluded while capturing only table rows.
+                    <div style="margin-top: 14px; padding: 16px 18px; background: rgba(10, 10, 14, 0.65); border: 1px solid var(--card-border); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 10px; font-size: 0.90rem; line-height: 1.6;">
+                        <div><b>⚡ Auto Detect (Page)</b>: Analyzes layout and table borders to automatically snap a bounding box and column dividers around transactions on the active page.</div>
+                        <div><b>✨ Auto Detect (All Pages)</b>: Automatically scans, detects, and adapts table boundaries across every page in the document in one go.</div>
+                        <div><b>🔄 Auto-apply to next pages</b>: Check this box to automatically cascade manual adjustments on the current page forward to all subsequent pages.</div>
+                        <div><b>█ Draw Table / Resize</b>: Drag a custom rectangle around the transaction area, or drag any of the 8 border handles to adjust coordinates.</div>
+                        <div><b>║ Draw Columns</b>: Click inside the table box to insert or reposition vertical dividers separating Date, Description, Cheque/Ref, Debit, Credit, and Balance.</div>
+                        <div><b>═ Draw Rows</b>: Place horizontal dividers to separate headers from data or isolate complex multi-line transactions.</div>
+                        <div><b>📋 Copy Prev Page</b>: Instantly clones the previous page’s table area and column splits onto the current page (ideal for statements with consistent layouts).</div>
+                        <div><b>🚫 Skip Page</b>: Marks non-transaction pages (cover pages, terms & conditions, marketing flyers) with a "PAGE SKIPPED" banner so they are omitted from extraction.</div>
+                        <div><b>🗑️ Clear Page / Clear All</b>: Removes bounding boxes from the current page or resets all pages across the document.</div>
+                        <div><b>🔍 Zoom & Navigation</b>: Use <b>Zoom In/Out</b> and <b>Fit to Height</b> for pixel-precise tuning, then click <b>"Save Extraction Area"</b> to confirm.</div>
+                    </div>
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-title">Set Password (If Protected)</div>
+                <div class="step-desc">If statements are password-protected (e.g., PAN, Date of Birth, or Account Number), enter the password in the dialog and check <b>"Apply password to all statements"</b>.</div>
+            </li>
+            <li class="step-item">
+                <div class="step-title">Choose Extraction Mode</div>
+                <div class="step-desc">
+                    • <b>Standard Digital Extraction</b>: Ultra-fast native text parsing for normal selectable PDFs.<br>
+                    • <b>Enable Local OCR</b>: Offline text recognition for scanned statements (requires local OCR module).<br>
+                    • <b>Extract with AI</b>: Uses Google Gemini for high-accuracy parsing of complex multi-column or scanned statements.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-title">Extract & Export to Excel</div>
+                <div class="step-desc">Click <b>"Extract & Parse Statements"</b>. The converter extracts transactions, aligns multiline descriptions, standardizes debit/credit amounts, and saves cleanly structured Excel sheets.</div>
+            </li>
+        </ul>
+
+        <div class="callout-box callout-tip" style="margin-top: 24px;">
+            <span class="callout-icon">💡</span>
+            <div>
+                <b>Pro Tip:</b> Click <b>"Edit Columns"</b> to customize output column headers (e.g., Date, Narration, Chq/Ref No, Withdrawal, Deposit, Balance) to match your accounting software.
+            </div>
+        </div>
+    </section>
+
+    <!-- GEMINI API KEY SETUP -->
+    <section id="api-key" class="module-card">
+        <div class="card-header">
+            <div class="card-title-group">
+                <div class="card-icon">🔑</div>
+                <div>
+                    <h2 class="card-title">Google Gemini API Key Setup</h2>
+                    <div style="font-size: 0.90rem; color: var(--text-secondary);">Required only for "Extract with AI" mode</div>
+                </div>
+            </div>
+            <span class="card-tag tag-mint">Free & Private</span>
+        </div>
+
+        <ul class="step-list">
+            <li class="step-item">
+                <div class="step-title">Open Google AI Studio</div>
+                <div class="step-desc">Visit <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="color: var(--accent-blue); text-decoration: underline; font-weight: 600;">aistudio.google.com/app/apikey</a> and sign in with your Google account.</div>
+            </li>
+            <li class="step-item">
+                <div class="step-title">Generate Personal Key</div>
+                <div class="step-desc">Click <b>"Create API key"</b> to generate your personal key. It is completely free for individual usage.</div>
+            </li>
+            <li class="step-item">
+                <div class="step-title">Save in Converter</div>
+                <div class="step-desc">Paste your key into the <b>Gemini API Key</b> input field on the Bank Statement Converter screen or in Vertex <b>Settings</b>.</div>
+            </li>
+        </ul>
+    </section>
+
+    <!-- SECURITY & PRIVACY -->
+    <section id="privacy" class="module-card">
+        <div class="card-header">
+            <div class="card-title-group">
+                <div class="card-icon">🔒</div>
+                <div>
+                    <h2 class="card-title">Security & Data Privacy</h2>
+                    <div style="font-size: 0.90rem; color: var(--text-secondary);">Your financial documents remain 100% private</div>
+                </div>
+            </div>
+            <span class="card-tag tag-ice">Zero Telemetry</span>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-box">
+                <h4>🛡️ Local Parsing</h4>
+                <p>Standard text parsing and Local OCR run completely offline on your computer. Zero financial data is transmitted over the internet.</p>
+            </div>
+            <div class="feature-box">
+                <h4>🔑 Volatile Passwords</h4>
+                <p>Statement passwords are kept only in volatile memory during the active session and are never written to disk or logs.</p>
+            </div>
+            <div class="feature-box">
+                <h4>📁 Direct Output</h4>
+                <p>Generated Excel workbooks are saved directly to your chosen folder.</p>
+            </div>
+        </div>
+
+        <div class="callout-box callout-tip" style="margin-top: 22px; text-align: center; justify-content: center; flex-direction: column; align-items: center; border-color: rgba(48, 209, 88, 0.3); background: rgba(48, 209, 88, 0.05);">
+            <div style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; color: #e3f0ff;">🔒 Note on Data & AI Processing</div>
+            <div style="color: var(--text-secondary); max-width: 720px; line-height: 1.65; font-size: 0.90rem;">
+                Vertex does not collect, track, or store any of your financial data or statement records on any server. All AI-powered processing connects <b>directly from your machine to Google Gemini</b> exclusively using your own personal API key—the developer of Vertex has <b>no access</b> to your credentials, bank statements, or extracted data. Furthermore, AI extraction is <b>strictly opt-in</b> and is executed only when you explicitly select the <i>"Extract with AI"</i> option.
+            </div>
+        </div>
+    </section>
+
+    <!-- CONTACT SECTION -->
+    <div class="contact-section">
+        <p class="contact-text">Have feedback, discovered a bug, or want to suggest new features for the Bank Statement Converter?</p>
+        <a href="https://vishwasupponi.blogspot.com/links" target="_blank" rel="noopener noreferrer" class="contact-btn">
+            <span>Contact Author</span> ↗
+        </a>
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+        <p>© 2026 <span class="author-glow">Vishwas Upponi</span> — <span class="vertex-glow">Vertex</span>. Released under GNU AGPL-3.0.</p>
+    </footer>
+
+</div>
+
+</body>
+</html>

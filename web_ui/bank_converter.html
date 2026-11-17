@@ -1,0 +1,3067 @@
+<style>
+/* Suppress default Edge/WebView2 password reveal inside input fields */
+input::-ms-reveal,
+input::-ms-clear,
+.module-input::-ms-reveal,
+.module-input::-ms-clear {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  pointer-events: none !important;
+}
+input::-webkit-credentials-auto-fill-button,
+input::-webkit-contacts-auto-fill-button {
+  visibility: hidden !important;
+  display: none !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+}
+</style>
+
+<div class="module-view-container">
+  <!-- Title Section -->
+  <div class="module-view-header">
+    <h1 class="module-view-title">BANK STATEMENT CONVERTER</h1>
+    <a href="javascript:void(0)" class="module-instructions-link" onclick="openInstructions()">
+      📖 Click here to view the Instructions
+    </a>
+  </div>
+
+  <!-- 1. File Upload Section Card -->
+  <div class="original-card module-section-card">
+    <div class="action-btn-row">
+      <button id="btn-select-bank-files" class="btn-pill btn-pill-primary" onclick="selectBankFiles()">Select Statements</button>
+      <button id="btn-draw-area" class="btn-pill btn-pill-secondary" disabled onclick="openWebAreaSelector()">Define Extraction Area</button>
+      <button id="btn-reset-files" class="btn-pill btn-pill-danger" disabled onclick="resetBankFiles()">Reset Selection</button>
+    </div>
+    <div id="bank-files-box" class="module-display-box">
+      No files selected. Click 'Select Statements' above to load documents.
+    </div>
+    <div id="crop-area-lbl" class="module-status-italic">
+      Extraction Area Selection: None (Parses whole document)
+    </div>
+  </div>
+
+  <!-- 2. Options Section Card -->
+  <div class="original-card module-section-card">
+    <label class="custom-chk-row">
+      <input type="checkbox" id="chk-auto-organize" checked onchange="onBankOptionChange('autoOrganize', this.checked)" />
+      <span class="m3-checkbox"></span>
+      <span class="chk-label-bold">Auto-Organize Tables (Groups multiline descriptions, cleans amount strings)</span>
+    </label>
+    <label class="custom-chk-row">
+      <input type="checkbox" id="chk-local-ocr" checked onchange="onBankOptionChange('useOcr', this.checked)" />
+      <span class="m3-checkbox"></span>
+      <span class="chk-label-bold">Enable Local OCR (for scanned/non-selectable PDFs)</span>
+    </label>
+    <label class="custom-chk-row">
+      <input type="checkbox" id="chk-gemini-ai" onchange="toggleGeminiSubframe(this.checked)" />
+      <span class="m3-checkbox"></span>
+      <span class="chk-label-bold">Extract with AI (Higher Accuracy & OCR)</span>
+    </label>
+
+    <!-- Gemini AI Subframe -->
+    <div id="gemini-subframe" class="gemini-subframe" style="display: none;">
+      <div class="privacy-notice-box">
+        <h4 class="privacy-title">About "Extract with AI" & Data Privacy</h4>
+        <p class="privacy-text">
+          The Extract with AI feature utilizes Google Gemini to accurately parse and extract your data. By enabling this feature, you agree to the following data processing terms:
+        </p>
+        <p class="privacy-text">
+          <strong>• Account-Linked Processing:</strong> Enabling this feature will send the text/documents to Gemini for processing. This data is processed entirely through the Google account linked to the API key you provided. <strong>I do not store, access, or log your API key or data on my server.</strong>
+        </p>
+        <p class="privacy-text">
+          <strong>• How Google Handles Your Data:</strong> Because the data stays inside the boundary of the account that owns the API key, Google’s data usage policy depends entirely on your specific API key's tier:
+        </p>
+        <ul class="privacy-list">
+          <li><strong>Paid Tier:</strong> Your data remains 100% private. Google is legally restricted from using your extracted data to train its models.</li>
+          <li><strong>Free Tier:</strong> Google is allowed to check your data for human review and utilize it to train and improve its AI models.</li>
+        </ul>
+        <p class="privacy-text">
+          If you are processing sensitive or confidential information, it is highly recommended to enable billing on your Google AI Studio account to guarantee total data privacy.
+        </p>
+      </div>
+
+      <div class="form-row" style="margin-top: 14px;">
+        <label class="form-row-label">Gemini API Key:</label>
+        <div class="input-with-eye">
+          <input type="password" id="gemini-api-key-input" class="module-input" placeholder="Paste your Google AI Studio API Key here..." autocomplete="off" spellcheck="false" oninput="onBankOptionChange('apiKey', this.value)" />
+          <button class="eye-btn" onclick="togglePasswordVisibility('gemini-api-key-input', this)">👁</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Statement Password Row -->
+    <div class="form-row" style="margin-top: 18px;">
+      <label class="form-row-label">Statement Password (if encrypted):</label>
+      <div class="input-with-eye">
+        <input type="password" id="pdf-password-input" class="module-input" placeholder="Enter password for encrypted PDFs (Optional)..." autocomplete="off" spellcheck="false" oninput="onBankOptionChange('pwd', this.value)" />
+        <button class="eye-btn" onclick="togglePasswordVisibility('pdf-password-input', this)">👁</button>
+      </div>
+    </div>
+    <label class="custom-chk-row" style="margin-top: 10px;">
+      <input type="checkbox" id="chk-apply-all-pwd" checked onchange="onBankOptionChange('applyAll', this.checked)" />
+      <span class="m3-checkbox"></span>
+      <span class="chk-label-bold">Apply password to all statements</span>
+    </label>
+  </div>
+
+  <!-- Run Action Container -->
+  <div class="module-run-container">
+    <div id="bank-progress-wrap" style="display: none; max-width: 480px; margin: 0 auto 16px auto;">
+      <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+        <span id="bank-progress-text">Extracting statement data...</span>
+        <span id="bank-progress-pct">0%</span>
+      </div>
+      <div style="width: 100%; height: 10px; border-radius: 5px; background: var(--bg-card); border: 1px solid var(--border-card); overflow: hidden; padding: 1px; box-sizing: border-box;">
+        <div id="bank-progress-bar" style="width: 0%; height: 100%; border-radius: 4px; background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); transition: width 0.25s ease;"></div>
+      </div>
+    </div>
+
+    <div id="bank-run-status" class="module-status-italic" style="display: none; margin-bottom: 12px;"></div>
+
+    <div style="display: flex; justify-content: center; gap: 12px;">
+      <button id="btn-start-extract" class="module-btn-run" onclick="startBankExtraction()">
+        Extract & Parse Statements
+      </button>
+      <button id="btn-reopen-tx-grid" class="btn-pill btn-pill-secondary" style="display: none; height: 50px; padding: 0 24px; font-weight: 700; border-radius: 25px;" onclick="reopenTransactionGrid()">
+        📊 View Extracted Data
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- 1. FULLSCREEN 3-PANE NATIVE WEB AREA SELECTOR MODAL                       -->
+<!-- ========================================================================= -->
+<div id="area-selector-modal" class="web-fullscreen-modal" style="display: none;">
+  <div class="area-window-container">
+    
+    <!-- LEFT SIDEBAR: Selected Statements -->
+    <div class="area-sidebar area-sidebar-left">
+      <div class="area-sidebar-header">
+        <h2 class="area-sidebar-heading">Selected Statements</h2>
+      </div>
+      <div id="area-file-list" class="area-file-list-scroll">
+        <!-- Rendered file item buttons dynamically -->
+      </div>
+    </div>
+
+    <!-- CENTER MAIN CONTAINER: Control Bar, Canvas Viewport, Action Bar -->
+    <div class="area-center-main">
+      
+      <!-- TOP CONTROL BAR -->
+      <div class="area-top-control-bar">
+        <div class="area-control-center">
+          <div class="area-nav-subframe">
+            <button id="area-btn-prev" class="area-ctrl-btn" onclick="areaPrevPage()">◀ Prev Page</button>
+            <span id="area-page-label" class="area-page-title">Page 1 of 1</span>
+            <button id="area-btn-next" class="area-ctrl-btn" onclick="areaNextPage()">Next Page ▶</button>
+          </div>
+          <div class="area-sep-label">|</div>
+          <div class="area-zoom-subframe">
+            <button class="area-ctrl-btn" onclick="areaZoomIn()">Zoom In (+)</button>
+            <button class="area-ctrl-btn" onclick="areaZoomOut()">Zoom Out (-)</button>
+            <button class="area-ctrl-btn" style="min-width: 110px;" onclick="areaZoomFitHeight()">Fit to Height</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MIDDLE SCROLLABLE CANVAS VIEWPORT -->
+      <div id="area-canvas-scroll" class="area-canvas-viewport">
+        <div id="area-canvas-wrapper" class="area-canvas-wrapper">
+          
+          <!-- Loading Spinner -->
+          <div id="area-loading-spinner" class="canvas-loading" style="display: none;">
+            <span class="btn-spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
+            <span style="margin-top: 12px; font-size: 14px; font-weight: 600; color: #fff;">Rendering PDF Page...</span>
+          </div>
+
+          <!-- Centered Auto-Detect Modal Card & Backdrop -->
+          <div id="area-autodetect-overlay" class="area-autodetect-backdrop" style="display: none;">
+            <div class="area-autodetect-card">
+              <div class="area-card-title">⚡ Auto-Detecting Tables...</div>
+              <div id="area-autodetect-msg" class="area-card-msg">Analyzing layout & borders. Please wait...</div>
+              <div class="area-progress-track">
+                <div id="area-autodetect-bar" class="area-progress-fill" style="width: 0%;"></div>
+              </div>
+              <div class="area-card-sub">Analyzing layout & borders. Please wait...</div>
+            </div>
+          </div>
+
+          <!-- Page Skipped Watermark Banner -->
+          <div id="area-skip-watermark" class="skip-watermark" style="display: none;">
+            PAGE SKIPPED<br>
+            <span style="font-size: 15px; font-weight: 600; letter-spacing: 0.5px;">(No data will be extracted)</span>
+          </div>
+
+          <!-- The Interactive HTML5 Canvas -->
+          <canvas id="area-pdf-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- BOTTOM ACTION BAR -->
+      <div class="area-bottom-action-bar">
+        <div class="area-action-btns">
+          <button class="area-btn-cancel" onclick="closeAreaSelector()">Cancel</button>
+          <button class="area-btn-save" onclick="saveAreaSelector()">Save Extraction Area</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT SIDEBAR: Page Tools -->
+    <div class="area-sidebar area-sidebar-right">
+      <div class="area-sidebar-header">
+        <h2 class="area-sidebar-heading">Page Tools</h2>
+      </div>
+
+      <div class="area-tools-scroll">
+        <!-- AUTO DETECTION SECTION -->
+        <div class="area-section-title">AUTO DETECTION</div>
+        <button id="area-btn-auto-page" class="area-tool-btn area-btn-accent" onclick="areaAutoDetectCurrentPage()">⚡ Auto Detect (Page)</button>
+        <button id="area-btn-auto-all" class="area-tool-btn area-btn-accent" onclick="areaAutoDetectAllPages()">✨ Auto Detect (All Pages)</button>
+        
+        <label class="area-chk-row" id="lbl-auto-propagate">
+          <input type="checkbox" id="chk-auto-propagate" onchange="onAutoPropagateToggle(this.checked)" />
+          <span class="m3-checkbox"></span>
+          <span class="area-chk-label">Auto-apply to next pages</span>
+        </label>
+
+        <div class="area-divider"></div>
+
+        <!-- DRAWING MODE SECTION -->
+        <div class="area-section-title">DRAWING MODE</div>
+        <button id="tb-mode-box" class="area-tool-btn area-btn-mode active" onclick="setAreaDrawMode('box')">█ Draw Table / Resize</button>
+        <button id="tb-mode-col" class="area-tool-btn area-btn-mode" onclick="setAreaDrawMode('col')">║ Draw Columns</button>
+        <button id="tb-mode-row" class="area-tool-btn area-btn-mode" onclick="setAreaDrawMode('row')">═ Draw Rows</button>
+
+        <div class="area-divider"></div>
+
+        <!-- PAGE ACTIONS SECTION -->
+        <div class="area-section-title">PAGE ACTIONS</div>
+        <button id="area-btn-copy-prev" class="area-tool-btn area-btn-copy" onclick="areaCopyPrevPage()">📋 Copy Prev Page</button>
+        
+        <label class="area-chk-row" style="margin: 8px 0 10px 0;">
+          <input type="checkbox" id="chk-skip-page" onchange="areaToggleSkipPage(this.checked)" />
+          <span class="m3-checkbox m3-danger"></span>
+          <span class="area-chk-label area-text-danger">Skip Page</span>
+        </label>
+
+        <button class="area-tool-btn area-btn-clear" onclick="areaClearCurrentPage()">Clear Page</button>
+        <button class="area-tool-btn area-btn-clear-all" onclick="areaClearAllPages()">Clear All Pages</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- 2. FULLSCREEN NATIVE WEB TRANSACTION REVIEW & COLUMN EDITOR MODAL -->
+<!-- ========================================================================= -->
+<div id="tx-editor-modal" class="web-fullscreen-modal" style="display: none;">
+  <div id="tx-modal-window" class="tx-modal-window">
+    
+    <!-- TOP FULL-SCREEN TITLE BAR -->
+    <div id="tx-modal-header" class="tx-modal-header">
+      <div class="tx-header-left">
+        <span class="tx-header-icon">📑</span>
+        <div class="tx-header-title">Review and Edit Extracted Transactions</div>
+      </div>
+      <button class="tx-close-btn" onclick="closeTransactionModal()" title="Close">✕</button>
+    </div>
+
+    <!-- ROW 0: TOP PANEL (Search & Info) -->
+    <div class="tx-top-panel">
+      <span class="tx-search-label">Search Extracted Data:</span>
+      <input type="text" id="tx-search-box" class="tx-search-entry" placeholder="Filter by text contents or source..." oninput="onTxSearch(this.value)">
+      <span id="tx-info-label" class="tx-info-label">Total Transactions: 0</span>
+    </div>
+
+    <!-- ROW 1: CENTER MAIN GRID (Table Pane + Editor Tabview Pane) -->
+    <div class="tx-center-grid">
+      
+      <!-- LEFT PANE: Table Frame -->
+      <div class="tx-table-card">
+        <div class="tx-table-container">
+          <table id="tx-data-table" class="tx-treeview">
+            <thead id="tx-table-thead">
+              <!-- Rendered dynamically: col headers + Source File -->
+            </thead>
+            <tbody id="tx-table-tbody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT PANE: CTkTabview Editor Panel (width ~340px) -->
+      <div class="tx-tabview-card">
+        <!-- Segmented Tab Header -->
+        <div class="tx-segmented-bar">
+          <button id="tx-tabbtn-row" class="tx-seg-btn active" onclick="switchTxTab('row')">Edit Row</button>
+          <button id="tx-tabbtn-header" class="tx-seg-btn" onclick="switchTxTab('header')">Column Headers</button>
+        </div>
+
+        <!-- TAB 1: EDIT ROW -->
+        <div id="tx-tabpage-row" class="tx-tab-page" style="display: flex;">
+          <div class="tx-tab-title">EDIT SELECTED ROW</div>
+          <div id="tx-row-fields-scroll" class="tx-tab-scroll">
+            <!-- Dynamic field labels and inputs for the selected row -->
+          </div>
+          
+          <div class="tx-tab-actions">
+            <div class="tx-row-btn-grid">
+              <button class="tx-btn-action tx-btn-update" onclick="saveSelectedRowChanges()">Update Row</button>
+              <button class="tx-btn-action tx-btn-delete" onclick="deleteSelectedRow()">Delete Row</button>
+            </div>
+            <button class="tx-btn-action tx-btn-add" onclick="addNewTxRow()">Add New Row</button>
+          </div>
+        </div>
+
+        <!-- TAB 2: COLUMN HEADERS -->
+        <div id="tx-tabpage-header" class="tx-tab-page" style="display: none;">
+          <div class="tx-tab-title">RENAME COLUMNS</div>
+          <div id="tx-header-fields-scroll" class="tx-tab-scroll">
+            <!-- Dynamic inputs for renaming each column header -->
+          </div>
+          
+          <div class="tx-tab-actions">
+            <button class="tx-btn-action tx-btn-apply" onclick="applyTxHeaderNames()">Apply Header Names</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ROW 2: BOTTOM PANEL (Consolidate & Export Actions) -->
+    <div class="tx-bottom-panel">
+      <div class="tx-bottom-left">
+        <label class="custom-chk-row" style="margin: 0;">
+          <input type="checkbox" id="tx-chk-consolidate" checked>
+          <span class="m3-checkbox"></span>
+          <span class="chk-label-bold" style="font-size: 13px;">Consolidate all files into one Excel sheet</span>
+        </label>
+      </div>
+
+      <div class="tx-bottom-right">
+        <button class="tx-btn-cancel" onclick="closeTransactionModal()">Cancel</button>
+        <button class="tx-btn-export" onclick="exportTransactionsToExcel()">Export to Excel</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- COMPONENT STYLES                                                          -->
+<!-- ========================================================================= -->
+<style>
+.web-fullscreen-modal {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-app, #0B0B0B);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(12px);
+  animation: modalFadeIn 0.18s ease-out;
+}
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.99); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* 3-Pane Area Selector Container */
+.area-window-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-app, #0B0B0B);
+}
+
+/* Left & Right Sidebars */
+.area-sidebar {
+  width: 250px;
+  min-width: 250px;
+  max-width: 250px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card, #0B0B0B);
+  box-sizing: border-box;
+}
+.area-sidebar-left {
+  border-right: 1px solid var(--border-card, #222222);
+}
+.area-sidebar-right {
+  border-left: 1px solid var(--border-card, #222222);
+}
+.area-sidebar-header {
+  padding: 16px 16px 12px 16px;
+  border-bottom: 1px solid var(--border-card, #222222);
+}
+.area-sidebar-heading {
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary, #FFFFFF);
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+.area-file-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.area-file-btn {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary, #A0A0A0);
+  font-family: 'Lexend', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+.area-file-btn:hover {
+  background: var(--btn-neutral-bg, rgba(255, 255, 255, 0.06));
+  color: var(--text-primary, #FFFFFF);
+}
+.area-file-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* Center Main Area */
+.area-center-main {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app, #0B0B0B);
+  min-width: 400px;
+  overflow: hidden;
+}
+
+/* Top Control Bar */
+.area-top-control-bar {
+  margin: 12px 16px 8px 16px;
+  background: var(--bg-card, #111111);
+  border: 1px solid var(--border-card, #222222);
+  border-radius: 12px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.area-control-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.area-nav-subframe, .area-zoom-subframe {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.area-ctrl-btn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: var(--btn-neutral-bg);
+  border: 1px solid var(--border-card);
+  color: var(--btn-neutral-text);
+  font-family: 'Lexend', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.area-ctrl-btn:hover:not(:disabled) {
+  background: var(--btn-neutral-hover);
+  color: var(--text-primary);
+}
+.area-ctrl-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.area-page-title {
+  font-family: 'Lexend', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #FFFFFF);
+  padding: 0 12px;
+  min-width: 120px;
+  text-align: center;
+}
+.area-sep-label {
+  font-family: 'Lexend', sans-serif;
+  font-size: 14px;
+  color: var(--text-secondary, #6B7280);
+  padding: 0 10px;
+}
+
+/* Canvas Viewport */
+.area-canvas-viewport {
+  flex: 1;
+  margin: 0 16px;
+  overflow: auto;
+  background: var(--bg-app, #0B0B0B);
+  border: 1px solid var(--border-card, #222222);
+  border-radius: 8px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.area-canvas-wrapper {
+  position: relative;
+  margin: auto;
+  display: inline-block;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-card);
+}
+#area-pdf-canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+/* Bottom Action Bar */
+.area-bottom-action-bar {
+  margin: 8px 16px 12px 16px;
+  background: var(--bg-card, #111111);
+  border: 1px solid var(--border-card, #222222);
+  border-radius: 8px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+.area-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.area-btn-cancel {
+  height: 32px;
+  width: 100px;
+  border-radius: 16px;
+  background: var(--btn-neutral-bg);
+  border: 1px solid var(--border-card);
+  color: var(--btn-neutral-text);
+  font-family: 'Lexend', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.area-btn-cancel:hover {
+  background: var(--btn-neutral-hover);
+}
+.area-btn-save {
+  height: 32px;
+  width: 180px;
+  border-radius: 16px;
+  background: var(--accent);
+  border: none;
+  color: var(--accent-text);
+  font-family: 'Lexend', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 10px var(--accent-glow);
+  transition: filter 0.15s;
+}
+.area-btn-save:hover {
+  filter: brightness(1.1);
+}
+
+/* Right Sidebar Tools */
+.area-tools-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.area-section-title {
+  font-family: 'Lexend', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary, #A0A0A0);
+  margin: 8px 0 3px 0;
+}
+.area-tool-btn {
+  width: 100%;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  font-family: 'Lexend', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+}
+.area-tool-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.area-tool-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.area-btn-accent {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+.area-btn-mode {
+  height: 34px;
+  background: var(--btn-neutral-bg);
+  border: 1px solid var(--border-card);
+  color: var(--btn-neutral-text);
+  font-size: 11px;
+}
+.area-btn-mode:hover:not(.active) {
+  background: var(--btn-neutral-hover);
+  color: var(--text-primary);
+}
+.area-btn-mode.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+.area-btn-copy {
+  height: 34px;
+  background: #2E5B3D;
+  color: #FFFFFF;
+  font-size: 11px;
+}
+.area-btn-copy:hover {
+  background: #244730;
+}
+.area-btn-clear {
+  height: 34px;
+  background: #7e2828;
+  color: #FFFFFF;
+  font-size: 11px;
+}
+.area-btn-clear:hover {
+  background: #5c1d1d;
+}
+.area-btn-clear-all {
+  height: 34px;
+  background: #8b0000;
+  color: #FFFFFF;
+  font-size: 11px;
+}
+.area-btn-clear-all:hover {
+  background: #5c0000;
+}
+.area-divider {
+  height: 1px;
+  background: var(--border-card, #222222);
+  margin: 8px 0;
+}
+.area-chk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 2px;
+  user-select: none;
+  position: relative;
+}
+.area-chk-row input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.area-chk-label {
+  font-family: 'Lexend', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary, #E0E0E0);
+}
+.area-text-danger {
+  color: #ff4444;
+}
+.m3-danger {
+  border-color: #ff4444 !important;
+}
+.area-chk-row:hover .m3-checkbox {
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 8px var(--accent-glow);
+}
+.area-chk-row input[type="checkbox"]:checked + .m3-checkbox {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: 14px 14px !important;
+  box-shadow: 0 2px 10px var(--accent-glow) !important;
+}
+[data-palette="Monochrome Black"][data-mode="dark"] .area-chk-row input[type="checkbox"]:checked + .m3-checkbox {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000000' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E") !important;
+}
+.area-chk-row input:checked + .m3-danger,
+.area-chk-row input:checked ~ .m3-danger {
+  background-color: #ff4444 !important;
+  border-color: #ff4444 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: 14px 14px !important;
+}
+
+/* Auto Detection Progress Backdrop & Card */
+.area-autodetect-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+}
+.area-autodetect-card {
+  background: var(--bg-card, #181825);
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  padding: 24px 28px;
+  width: 360px;
+  text-align: center;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+}
+.area-card-title {
+  font-family: 'Lexend', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #FFFFFF);
+  margin-bottom: 8px;
+}
+.area-card-msg {
+  font-family: 'Lexend', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary, #C4B5FD);
+  margin-bottom: 12px;
+}
+.area-progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--btn-neutral-bg, rgba(255, 255, 255, 0.1));
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.area-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+.area-card-sub {
+  font-family: 'Lexend', sans-serif;
+  font-size: 10px;
+  font-style: italic;
+  color: var(--text-muted, #9CA3AF);
+}
+
+/* Loading & Skipped Banner */
+.canvas-loading {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.skip-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  font-family: 'Lexend', sans-serif;
+  font-size: 40px;
+  font-weight: 900;
+  color: #ff3333;
+  border: 4px solid #ff3333;
+  padding: 14px 32px;
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 15;
+  text-align: center;
+  line-height: 1.3;
+  letter-spacing: 2px;
+  background: rgba(0, 0, 0, 0.65);
+}
+.badge-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+/* ─── Full-Screen Native Web Transaction Review & Edit View ─── */
+#tx-editor-modal.web-fullscreen-modal {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg-app, #0B0B0B);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: none;
+  animation: modalFadeIn 0.15s ease-out;
+}
+.tx-modal-window {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app, #0B0B0B);
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+.tx-modal-header {
+  height: 46px;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--bg-card, #111111);
+  border-bottom: 1px solid var(--border-card, #222222);
+  border-radius: 0;
+  cursor: default;
+  user-select: none;
+}
+.tx-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tx-header-icon {
+  font-size: 16px;
+}
+.tx-header-title {
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #FFFFFF);
+  letter-spacing: 0.3px;
+}
+.tx-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-secondary, #A0A0A0);
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 6px 12px;
+  transition: var(--transition-speed);
+}
+.tx-close-btn:hover {
+  background: #E81123 !important;
+  color: #FFFFFF !important;
+}
+.tx-top-panel {
+  height: 56px;
+  min-height: 56px;
+  margin: 12px 14px 8px 14px;
+  padding: 0 16px;
+  background: var(--bg-card, #111111);
+  border: 1px solid var(--border-card, #222222);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-sizing: border-box;
+}
+.tx-search-label {
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #FFFFFF);
+  white-space: nowrap;
+}
+.tx-search-entry {
+  flex: 1;
+  height: 38px;
+  background: var(--bg-input, #0A0A0A);
+  border: 1px solid var(--border-card, #2A2A2A);
+  border-radius: 10px;
+  padding: 0 14px;
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 15px;
+  color: var(--text-primary, #FFFFFF);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.tx-search-entry:focus {
+  border-color: var(--accent);
+}
+.tx-info-label {
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent, #14B8A6);
+  white-space: nowrap;
+}
+.tx-center-grid {
+  flex: 1;
+  min-height: 0;
+  margin: 0 14px;
+  display: flex;
+  gap: 14px;
+  overflow: hidden;
+}
+.tx-table-card {
+  flex: 3;
+  min-width: 0;
+  background: var(--bg-card, #111111);
+  border: 1px solid var(--border-card, #222222);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.tx-table-container {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: var(--bg-card, #111111);
+}
+.tx-treeview {
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-primary, #E0E0E0);
+}
+.tx-treeview thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-card-hover, #18181A);
+  height: 36px;
+  padding: 0;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text-primary, #FFFFFF);
+  border-bottom: 2px solid var(--border-card, #222222);
+  border-right: 1px dashed var(--border-card, rgba(255, 255, 255, 0.18));
+  white-space: nowrap;
+  user-select: none;
+  z-index: 3;
+  box-sizing: border-box;
+  overflow: visible;
+  position: relative;
+}
+.tx-treeview thead th:last-child {
+  border-right: none;
+}
+.tx-th-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  padding: 0 10px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+  transition: background 0.12s ease;
+}
+.tx-th-inner:hover {
+  background: var(--border-subtle, rgba(255, 255, 255, 0.05));
+}
+.tx-col-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 10;
+}
+.tx-col-resizer:hover,
+.tx-col-resizer.resizing {
+  background: var(--accent, #14B8A6);
+  opacity: 0.9;
+}
+.tx-treeview tbody td {
+  height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-subtle, #1A1A1E);
+  border-right: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.12));
+  color: var(--text-primary, #E0E0E0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+.tx-treeview tbody td:last-child {
+  border-right: none;
+}
+.tx-treeview tbody tr {
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.tx-treeview tbody tr:nth-child(even) td {
+  background: var(--bg-card-hover, rgba(255, 255, 255, 0.02));
+}
+.tx-treeview tbody tr:hover td {
+  background: var(--border-subtle, rgba(255, 255, 255, 0.05)) !important;
+}
+.tx-treeview tbody tr.selected td {
+  background: var(--accent-glow, rgba(20, 184, 166, 0.2)) !important;
+  color: var(--accent, #14B8A6);
+  font-weight: 600;
+}
+.tx-tabview-card {
+  width: 330px;
+  min-width: 330px;
+  max-width: 330px;
+  background: var(--bg-card, #111111);
+  border: 1px solid var(--border-card, #222222);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.tx-segmented-bar {
+  display: flex;
+  background: var(--bg-input, #18181A);
+  border: 1px solid var(--border-subtle, #222222);
+  padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.tx-seg-btn {
+  flex: 1;
+  height: 34px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary, #A0A0A0);
+  cursor: pointer;
+  transition: var(--transition-speed);
+}
+.tx-seg-btn:not(.active):hover {
+  color: var(--text-primary, #FFFFFF);
+  background: var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+.tx-seg-btn.active {
+  background: var(--accent, #FFFFFF) !important;
+  color: var(--accent-text, #111827) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.tx-seg-btn.active:hover {
+  color: var(--accent-text, #111827) !important;
+  opacity: 0.95;
+}
+.tx-tab-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.tx-tab-title {
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary, #FFFFFF);
+  text-align: center;
+  margin: 4px 0 10px 0;
+  letter-spacing: 0.5px;
+}
+.tx-tab-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  margin-bottom: 10px;
+}
+.tx-field-label {
+  display: block;
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary, #A0A0A0);
+  margin: 8px 0 3px 0;
+  text-align: left;
+}
+.tx-form-input {
+  width: 100%;
+  height: 34px;
+  background: var(--bg-input, #0A0A0A);
+  border: 1px solid var(--border-card, #2A2A2A);
+  border-radius: 8px;
+  padding: 0 10px;
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--text-primary, #FFFFFF);
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.tx-form-input:focus {
+  border-color: var(--accent);
+}
+.tx-tab-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tx-row-btn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.tx-btn-action {
+  height: 36px;
+  border: none;
+  border-radius: 18px;
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+.tx-btn-action:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+.tx-btn-update {
+  background: var(--accent, #14B8A6) !important;
+  color: var(--accent-text, #111827) !important;
+}
+.tx-btn-update:hover {
+  color: var(--accent-text, #111827) !important;
+  opacity: 0.92;
+}
+.tx-btn-delete {
+  background: #FCE8E6;
+  color: #C5221F;
+}
+[data-mode="dark"] .tx-btn-delete {
+  background: #7e2828;
+  color: #FFFFFF;
+}
+.tx-btn-add {
+  background: var(--btn-neutral-bg, #222222);
+  border: 1px solid var(--border-subtle, #333333);
+  color: var(--text-primary, #FFFFFF);
+}
+.tx-btn-apply {
+  background: var(--accent, #14B8A6) !important;
+  color: var(--accent-text, #111827) !important;
+  width: 100%;
+}
+.tx-btn-apply:hover {
+  color: var(--accent-text, #111827) !important;
+  opacity: 0.92;
+}
+
+/* Specific contrast override for Monochrome Black in dark mode */
+[data-palette="Monochrome Black"][data-mode="dark"] .tx-seg-btn.active,
+[data-palette="Monochrome Black"][data-mode="dark"] .tx-btn-update,
+[data-palette="Monochrome Black"][data-mode="dark"] .tx-btn-apply {
+  background: #FFFFFF !important;
+  color: #111827 !important;
+}
+[data-palette="Monochrome Black"][data-mode="dark"] .tx-seg-btn.active:hover,
+[data-palette="Monochrome Black"][data-mode="dark"] .tx-btn-update:hover,
+[data-palette="Monochrome Black"][data-mode="dark"] .tx-btn-apply:hover {
+  background: #E5E7EB !important;
+  color: #111827 !important;
+}
+.tx-bottom-panel {
+  height: 60px;
+  min-height: 60px;
+  margin: 8px 14px 12px 14px;
+  padding: 0 16px;
+  background: var(--bg-card, #111111);
+  border: 1px solid var(--border-card, #222222);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+.tx-bottom-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-secondary, #A0A0A0);
+}
+.tx-sum-sep {
+  opacity: 0.3;
+}
+.tx-bottom-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tx-btn-cancel {
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 18px;
+  background: var(--btn-neutral-bg, #2A2A2A);
+  border: 1px solid var(--border-subtle, #333333);
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary, #FFFFFF);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.tx-btn-cancel:hover {
+  background: var(--btn-neutral-hover, #3A3A3A);
+}
+.tx-btn-export {
+  height: 36px;
+  padding: 0 22px;
+  border-radius: 18px;
+  background: #217346;
+  border: none;
+  font-family: 'Lexend', -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #FFFFFF;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(33, 115, 70, 0.4);
+  transition: background 0.15s ease;
+}
+.tx-btn-export:hover {
+  background: #185635;
+}
+</style>
+
+<!-- ========================================================================= -->
+<!-- COMPONENT JAVASCRIPT LOGIC                                                -->
+<!-- ========================================================================= -->
+<script>
+window.onBankProgress = function(pct, msg) {
+  if (window.VERTEX_STATE && window.VERTEX_STATE.bank_converter) {
+    const st = window.VERTEX_STATE.bank_converter;
+    st.progressPct = pct;
+    st.progressMsg = msg;
+  }
+  const wrap = document.getElementById('bank-progress-wrap');
+  const bar = document.getElementById('bank-progress-bar');
+  const pctText = document.getElementById('bank-progress-pct');
+  const label = document.getElementById('bank-progress-text');
+
+  if (wrap) wrap.style.display = 'block';
+  if (bar) bar.style.width = pct + '%';
+  if (pctText) pctText.innerText = pct + '%';
+  if (label && msg) label.innerText = msg;
+};
+
+function renderBankConverterState() {
+  const st = window.VERTEX_STATE ? window.VERTEX_STATE.bank_converter : null;
+  if (!st) return;
+
+  const btnSelect = document.getElementById('btn-select-bank-files');
+  const btnArea = document.getElementById('btn-draw-area');
+  const btnReset = document.getElementById('btn-reset-files');
+  const btnStart = document.getElementById('btn-start-extract');
+  const btnReopen = document.getElementById('btn-reopen-tx-grid');
+  const box = document.getElementById('bank-files-box');
+  const cropLbl = document.getElementById('crop-area-lbl');
+  const wrap = document.getElementById('bank-progress-wrap');
+  const bar = document.getElementById('bank-progress-bar');
+  const pctText = document.getElementById('bank-progress-pct');
+  const label = document.getElementById('bank-progress-text');
+  const status = document.getElementById('bank-run-status');
+
+  const chkAuto = document.getElementById('chk-auto-organize');
+  const chkOcr = document.getElementById('chk-local-ocr');
+  const chkGemini = document.getElementById('chk-gemini-ai');
+  const geminiSubframe = document.getElementById('gemini-subframe');
+  const apiKeyInp = document.getElementById('gemini-api-key-input');
+  const pwdInp = document.getElementById('pdf-password-input');
+  const chkApplyAll = document.getElementById('chk-apply-all-pwd');
+
+  if (chkAuto) chkAuto.checked = st.autoOrganize !== false;
+  if (chkOcr) chkOcr.checked = st.useOcr !== false;
+  if (chkGemini) chkGemini.checked = !!st.useGemini;
+  if (geminiSubframe) geminiSubframe.style.display = st.useGemini ? 'block' : 'none';
+  if (apiKeyInp) apiKeyInp.value = st.apiKey || '';
+  if (pwdInp) pwdInp.value = st.pwd || '';
+  if (chkApplyAll) chkApplyAll.checked = st.applyAll !== false;
+
+  if (st.selectedFiles && st.selectedFiles.length > 0) {
+    box.innerHTML = st.selectedFiles.map((f, i) => `[${i+1}] ${f.split(/[\\\\/]/).pop()}  -  (${f})`).join('<br>');
+    if (btnReset) btnReset.disabled = st.isRunning;
+    const hasPdf = st.selectedFiles.some(f => f.toLowerCase().endsWith('.pdf'));
+    if (btnArea) {
+      btnArea.disabled = st.isRunning || !hasPdf;
+      btnArea.innerText = 'Define Extraction Area';
+    }
+  } else {
+    box.innerText = "No files selected. Click 'Select Statements' above to load documents.";
+    if (btnReset) btnReset.disabled = true;
+    if (btnArea) btnArea.disabled = true;
+  }
+
+  if (cropLbl) cropLbl.innerText = st.cropStatusText || "Extraction Area Selection: None (Parses whole document)";
+
+  if (btnReopen) {
+    btnReopen.style.display = (st.extractedTransactions && st.extractedTransactions.length > 0) ? 'inline-block' : 'none';
+  }
+
+  if (st.isRunning) {
+    if (btnSelect) btnSelect.disabled = true;
+    if (btnArea) btnArea.disabled = true;
+    if (btnReset) btnReset.disabled = true;
+    if (btnStart) {
+      btnStart.disabled = true;
+      btnStart.innerText = '⏳ Extracting Statements...';
+    }
+    if (wrap) wrap.style.display = 'block';
+    if (bar) bar.style.width = (st.progressPct || 0) + '%';
+    if (pctText) pctText.innerText = (st.progressPct || 0) + '%';
+    if (label) label.innerText = st.progressMsg || 'Extracting and parsing statement files, please wait...';
+  } else {
+    if (btnSelect) btnSelect.disabled = false;
+    if (btnStart) {
+      btnStart.disabled = false;
+      btnStart.innerText = 'Extract & Parse Statements';
+    }
+  }
+
+  if (status) {
+    if (st.statusHtml) {
+      status.style.display = 'block';
+      status.style.color = st.statusColor || '#10B981';
+      status.innerHTML = st.statusHtml;
+    } else if (st.statusText) {
+      status.style.display = 'block';
+      status.style.color = st.statusColor || '#EF4444';
+      status.innerText = st.statusText;
+    } else {
+      status.style.display = 'none';
+    }
+  }
+}
+
+function onBankOptionChange(key, val) {
+  if (window.VERTEX_STATE && window.VERTEX_STATE.bank_converter) {
+    window.VERTEX_STATE.bank_converter[key] = val;
+  }
+}
+
+async function selectBankFiles() {
+  const st = window.VERTEX_STATE.bank_converter;
+  if (st.isRunning) return;
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.pick_bank_files) {
+    const files = await window.pywebview.api.pick_bank_files();
+    if (files && files.length > 0) {
+      st.selectedFiles = files;
+      st.cropRects = {};
+      st.cropStatusText = "Extraction Area Selection: None (Parses whole document)";
+      st.statusHtml = '';
+      st.statusText = '';
+      renderBankConverterState();
+    }
+  }
+}
+
+function resetBankFiles() {
+  const st = window.VERTEX_STATE.bank_converter;
+  if (st.isRunning) return;
+
+  st.selectedFiles = [];
+  st.cropRects = {};
+  st.cropStatusText = "Extraction Area Selection: None (Parses whole document)";
+  st.statusHtml = '';
+  st.statusText = '';
+  st.progressPct = 0;
+  st.extractedTransactions = [];
+  renderBankConverterState();
+}
+
+function toggleGeminiSubframe(checked) {
+  const st = window.VERTEX_STATE.bank_converter;
+  st.useGemini = checked;
+  renderBankConverterState();
+}
+
+function togglePasswordVisibility(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.innerText = '🔒';
+  } else {
+    inp.type = 'password';
+    btn.innerText = '👁';
+  }
+}
+
+function openInstructions() {
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.open_instructions('bank_statement_converter');
+  }
+}
+
+// =========================================================================
+// EXTRACTION PIPELINE & NATIVE WEB TRANSACTION EDITOR
+// =========================================================================
+async function startBankExtraction() {
+  const st = window.VERTEX_STATE.bank_converter;
+  if (st.isRunning || !st.selectedFiles || st.selectedFiles.length === 0) {
+    alert("Please select at least one bank statement file before extracting.");
+    return;
+  }
+
+  if (st.useGemini && !st.apiKey) {
+    alert("Please provide a valid Google Gemini API key to use cloud extraction.");
+    return;
+  }
+
+  st.isRunning = true;
+  st.progressPct = 0;
+  st.progressMsg = 'Extracting and parsing statement files, please wait...';
+  st.statusHtml = '';
+  st.statusText = '';
+  renderBankConverterState();
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.run_bank_extraction) {
+    try {
+      const res = await window.pywebview.api.run_bank_extraction(
+        st.selectedFiles, st.useGemini, st.apiKey, st.useOcr, st.autoOrganize, st.pwd, st.applyAll, st.cropRects || {}
+      );
+      st.isRunning = false;
+      if (res && res.success && res.transactions && res.transactions.length > 0) {
+        st.progressPct = 100;
+        st.statusColor = '#10B981';
+        if (res.cached) {
+          st.statusHtml = `✓ Loaded ${res.count} transactions from session memory!`;
+        } else {
+          st.statusHtml = `✓ Extracted ${res.count} transactions successfully!`;
+        }
+        st.extractedTransactions = res.transactions;
+        openTransactionModal(res.transactions);
+      } else {
+        st.statusColor = '#EF4444';
+        st.statusText = `⚠ Extraction Notice: ${res ? res.error : 'No transactions extracted.'}`;
+      }
+    } catch(e) {
+      st.isRunning = false;
+      st.statusColor = '#EF4444';
+      st.statusText = `⚠ Error: ${e}`;
+    } finally {
+      renderBankConverterState();
+    }
+  }
+}
+
+function reopenTransactionGrid() {
+  const st = window.VERTEX_STATE.bank_converter;
+  if (_rawTransactions && _rawTransactions.length > 0) {
+    const modal = document.getElementById('tx-editor-modal');
+    if (modal) modal.style.display = 'flex';
+  } else if (st.extractedTransactions && st.extractedTransactions.length > 0) {
+    openTransactionModal(st.extractedTransactions);
+  }
+}
+
+// =========================================================================
+// NATIVE WEB TRANSACTION REVIEW & EDIT MODAL (FULL-SCREEN IN-APP VIEW)
+// =========================================================================
+let _rawTransactions = [];
+let _filteredTransactions = [];
+let _colKeys = [];
+let _colHeaders = [];
+let _selectedTxIndex = -1;
+let _currentSortCol = null;
+let _sortDirection = null; // null | 'asc' | 'desc'
+let _activeTxTab = 'row'; // 'row' | 'header'
+
+// Interactive Column Widths & Resizing State
+let _colWidths = {};
+let _isColResizing = false;
+
+function initColWidths() {
+  if (!_colWidths) _colWidths = {};
+  _colKeys.forEach((k, idx) => {
+    if (!_colWidths[k]) {
+      if (idx === 0) _colWidths[k] = 110;
+      else if (idx === 1) _colWidths[k] = 340;
+      else _colWidths[k] = 130;
+    }
+  });
+  if (!_colWidths['Source']) _colWidths['Source'] = 160;
+}
+
+function initColResize(e, colKey) {
+  e.stopPropagation();
+  e.preventDefault();
+  _isColResizing = true;
+
+  const startMouseX = e.clientX;
+  const startWidth = _colWidths[colKey] || 130;
+  const resizerEl = e.target;
+  if (resizerEl) resizerEl.classList.add('resizing');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+
+  const onMouseMove = (ev) => {
+    if (!_isColResizing) return;
+    const dx = ev.clientX - startMouseX;
+    const newWidth = Math.max(50, startWidth + dx);
+    _colWidths[colKey] = newWidth;
+
+    const th = document.querySelector(`th[data-col-key="${colKey}"]`);
+    if (th) {
+      th.style.width = `${newWidth}px`;
+      th.style.minWidth = `${newWidth}px`;
+      th.style.maxWidth = `${newWidth}px`;
+    }
+    const colIdx = (colKey === 'Source') ? _colKeys.length : _colKeys.indexOf(colKey);
+    if (colIdx >= 0) {
+      const tds = document.querySelectorAll(`#tx-table-tbody tr td:nth-child(${colIdx + 1})`);
+      tds.forEach(td => {
+        td.style.width = `${newWidth}px`;
+        td.style.minWidth = `${newWidth}px`;
+        td.style.maxWidth = `${newWidth}px`;
+      });
+    }
+  };
+
+  const onMouseUp = () => {
+    _isColResizing = false;
+    if (resizerEl) resizerEl.classList.remove('resizing');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    renderTxTableHeaders();
+    renderTxTableBody();
+  };
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+function escapeTxHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function openTransactionModal(txList) {
+  if (!txList || txList.length === 0) {
+    alert("No transactions extracted to review.");
+    return;
+  }
+
+  _rawTransactions = JSON.parse(JSON.stringify(txList));
+  
+  // Discover columns K from transactions (col_0, col_1, ... or custom keys)
+  const sample = _rawTransactions[0] || {};
+  const colPatternKeys = Object.keys(sample).filter(k => k.startsWith('col_'));
+  if (colPatternKeys.length > 0) {
+    _colKeys = colPatternKeys.sort((a, b) => {
+      const idxA = parseInt(a.replace('col_', ''), 10);
+      const idxB = parseInt(b.replace('col_', ''), 10);
+      return idxA - idxB;
+    });
+  } else {
+    _colKeys = Object.keys(sample).filter(k => k !== 'Source' && !k.startsWith('_'));
+  }
+
+  if (_colKeys.length === 0) {
+    _colKeys = ['col_0'];
+  }
+
+  // Initialize column headers (Column 1, Column 2, ...) or existing friendly names
+  _colHeaders = _colKeys.map((k, i) => {
+    if (k.startsWith('col_')) return `Column ${i + 1}`;
+    return k;
+  });
+
+  initColWidths();
+  _selectedTxIndex = 0;
+  _currentSortCol = null;
+  _sortDirection = null;
+  _activeTxTab = 'row';
+
+  const modal = document.getElementById('tx-editor-modal');
+  if (modal) modal.style.display = 'flex';
+
+  const searchBox = document.getElementById('tx-search-box');
+  if (searchBox) searchBox.value = '';
+
+  const consChk = document.getElementById('tx-chk-consolidate');
+  if (consChk) consChk.checked = true;
+
+  applyTxSearchFilter('');
+  renderTxTableHeaders();
+  renderTxTableBody();
+  renderTxEditorTabs();
+  selectTxRow(0);
+}
+
+function closeTransactionModal() {
+  const modal = document.getElementById('tx-editor-modal');
+  if (modal) modal.style.display = 'none';
+  renderBankConverterState();
+}
+
+function switchTxTab(tab) {
+  _activeTxTab = tab;
+  const btnRow = document.getElementById('tx-tabbtn-row');
+  const btnHeader = document.getElementById('tx-tabbtn-header');
+  const pageRow = document.getElementById('tx-tabpage-row');
+  const pageHeader = document.getElementById('tx-tabpage-header');
+
+  if (tab === 'row') {
+    if (btnRow) btnRow.classList.add('active');
+    if (btnHeader) btnHeader.classList.remove('active');
+    if (pageRow) pageRow.style.display = 'flex';
+    if (pageHeader) pageHeader.style.display = 'none';
+    populateRowEditorInputs();
+  } else {
+    if (btnRow) btnRow.classList.remove('active');
+    if (btnHeader) btnHeader.classList.add('active');
+    if (pageRow) pageRow.style.display = 'none';
+    if (pageHeader) pageHeader.style.display = 'flex';
+    populateHeaderRenameInputs();
+  }
+}
+
+function onTxSearch(val) {
+  applyTxSearchFilter(val);
+  renderTxTableBody();
+  if (_filteredTransactions.length > 0) {
+    selectTxRow(_filteredTransactions[0].origIdx);
+  }
+}
+
+function applyTxSearchFilter(query) {
+  const q = (query || '').toLowerCase().trim();
+  if (!q) {
+    _filteredTransactions = _rawTransactions.map((tx, idx) => ({ tx, origIdx: idx }));
+  } else {
+    _filteredTransactions = [];
+    _rawTransactions.forEach((tx, idx) => {
+      let match = false;
+      for (const k of _colKeys) {
+        if (String(tx[k] || '').toLowerCase().includes(q)) {
+          match = true;
+          break;
+        }
+      }
+      if (!match) {
+        const src = String(tx['Source'] || '').split(/[\\/]/).pop().toLowerCase();
+        if (src.includes(q)) match = true;
+      }
+      if (match) {
+        _filteredTransactions.push({ tx, origIdx: idx });
+      }
+    });
+  }
+
+  const infoLbl = document.getElementById('tx-info-label');
+  if (infoLbl) {
+    infoLbl.innerText = `Total Transactions: ${_filteredTransactions.length}`;
+  }
+  updateAccountingSummary();
+}
+
+function renderTxTableHeaders() {
+  const thead = document.getElementById('tx-table-thead');
+  if (!thead) return;
+
+  initColWidths();
+
+  let html = '<tr>';
+  _colKeys.forEach((k, idx) => {
+    const colName = _colHeaders[idx] || `Column ${idx + 1}`;
+    const w = _colWidths[k] || 130;
+    let align = 'center';
+    if (idx === 1) align = 'left';
+
+    let sortIndicator = '';
+    if (_currentSortCol === k && _sortDirection) {
+      sortIndicator = (_sortDirection === 'asc') ? ' ▲' : ' ▼';
+    }
+
+    html += `<th data-col-key="${k}" style="width: ${w}px; min-width: ${w}px; max-width: ${w}px; text-align: ${align};">
+      <div class="tx-th-inner" onclick="sortTxColumn('${k}')" title="Click to Sort (Asc / Desc / Reset)">
+        <span>${escapeTxHtml(colName)}</span>
+        <span id="tx-sort-icon-${k}" style="font-size: 10px; margin-left: 4px; color: var(--accent);">${sortIndicator}</span>
+      </div>
+      <div class="tx-col-resizer" onmousedown="initColResize(event, '${k}')" title="Drag to resize column"></div>
+    </th>`;
+  });
+
+  const srcW = _colWidths['Source'] || 160;
+  let srcSort = '';
+  if (_currentSortCol === 'Source' && _sortDirection) {
+    srcSort = (_sortDirection === 'asc') ? ' ▲' : ' ▼';
+  }
+  html += `<th data-col-key="Source" style="width: ${srcW}px; min-width: ${srcW}px; max-width: ${srcW}px; text-align: left;">
+    <div class="tx-th-inner" onclick="sortTxColumn('Source')" title="Click to Sort (Asc / Desc / Reset)">
+      <span>Source File</span>
+      <span id="tx-sort-icon-Source" style="font-size: 10px; margin-left: 4px; color: var(--accent);">${srcSort}</span>
+    </div>
+    <div class="tx-col-resizer" onmousedown="initColResize(event, 'Source')" title="Drag to resize column"></div>
+  </th>`;
+
+  html += '</tr>';
+  thead.innerHTML = html;
+}
+
+function renderTxTableBody() {
+  const tbody = document.getElementById('tx-table-tbody');
+  if (!tbody) return;
+
+  initColWidths();
+
+  if (_filteredTransactions.length === 0) {
+    const totalCols = _colKeys.length + 1;
+    tbody.innerHTML = `<tr><td colspan="${totalCols}" style="text-align: center; padding: 30px; color: var(--text-secondary);">No transactions match your search filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = _filteredTransactions.map((item) => {
+    const { tx, origIdx } = item;
+    const isSelected = (origIdx === _selectedTxIndex);
+    const srcFile = (tx['Source'] || '').split(/[\\/]/).pop();
+
+    let rowHtml = `<tr class="${isSelected ? 'selected' : ''}" onclick="selectTxRow(${origIdx})">`;
+    _colKeys.forEach((k, idx) => {
+      let val = tx[k] ?? '';
+      let align = 'center';
+      if (idx === 1) align = 'left';
+      else if (typeof val === 'number') align = 'right';
+
+      let displayVal = val;
+      if (typeof val === 'number') {
+        displayVal = val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      const w = _colWidths[k] || 130;
+      rowHtml += `<td style="width: ${w}px; min-width: ${w}px; max-width: ${w}px; text-align: ${align};">${escapeTxHtml(String(displayVal))}</td>`;
+    });
+
+    const srcW = _colWidths['Source'] || 160;
+    rowHtml += `<td style="width: ${srcW}px; min-width: ${srcW}px; max-width: ${srcW}px; text-align: left; color: var(--text-secondary); font-size: 11px;">${escapeTxHtml(srcFile)}</td>`;
+    rowHtml += `</tr>`;
+    return rowHtml;
+  }).join('');
+}
+
+function selectTxRow(origIdx) {
+  _selectedTxIndex = origIdx;
+
+  // Update table row highlighting
+  const rows = document.querySelectorAll('#tx-table-tbody tr');
+  rows.forEach(r => r.classList.remove('selected'));
+  
+  const filteredPos = _filteredTransactions.findIndex(item => item.origIdx === origIdx);
+  if (filteredPos >= 0 && rows[filteredPos]) {
+    rows[filteredPos].classList.add('selected');
+    rows[filteredPos].scrollIntoView({ block: 'nearest' });
+  }
+
+  populateRowEditorInputs();
+}
+
+function renderTxEditorTabs() {
+  populateHeaderRenameInputs();
+  populateRowEditorInputs();
+}
+
+function populateRowEditorInputs() {
+  const container = document.getElementById('tx-row-fields-scroll');
+  if (!container) return;
+
+  const currentTx = (_selectedTxIndex >= 0 && _selectedTxIndex < _rawTransactions.length)
+    ? _rawTransactions[_selectedTxIndex]
+    : null;
+
+  container.innerHTML = _colKeys.map((k, idx) => {
+    const labelText = _colHeaders[idx] || `Column ${idx + 1}`;
+    const val = currentTx ? (currentTx[k] ?? '') : '';
+    return `
+      <div style="margin-bottom: 8px;">
+        <label class="tx-field-label">${escapeTxHtml(labelText)}:</label>
+        <input type="text" id="tx-row-input-${idx}" class="tx-form-input" value="${escapeTxHtml(String(val))}">
+      </div>
+    `;
+  }).join('');
+}
+
+function populateHeaderRenameInputs() {
+  const container = document.getElementById('tx-header-fields-scroll');
+  if (!container) return;
+
+  container.innerHTML = _colKeys.map((k, idx) => {
+    const currentName = _colHeaders[idx] || `Column ${idx + 1}`;
+    return `
+      <div style="margin-bottom: 8px;">
+        <label class="tx-field-label">Column ${idx + 1} Name:</label>
+        <input type="text" id="tx-header-input-${idx}" class="tx-form-input" value="${escapeTxHtml(currentName)}">
+      </div>
+    `;
+  }).join('');
+}
+
+function saveSelectedRowChanges() {
+  if (_selectedTxIndex < 0 || _selectedTxIndex >= _rawTransactions.length) {
+    alert("No row selected for updating.");
+    return;
+  }
+
+  const tx = _rawTransactions[_selectedTxIndex];
+  _colKeys.forEach((k, idx) => {
+    const inp = document.getElementById(`tx-row-input-${idx}`);
+    if (inp) {
+      const valStr = inp.value.trim();
+      const cleaned = cleanJsAmount(valStr);
+      if (cleaned !== null && (valStr.includes('.') || valStr.includes(',') || /^\d+$/.test(valStr))) {
+        if (valStr.length <= 4 && /^\d+$/.test(valStr)) {
+          tx[k] = valStr;
+        } else {
+          tx[k] = cleaned;
+        }
+      } else {
+        tx[k] = valStr;
+      }
+    }
+  });
+
+  const query = (document.getElementById('tx-search-box').value || '');
+  applyTxSearchFilter(query);
+  renderTxTableBody();
+  selectTxRow(_selectedTxIndex);
+}
+
+function deleteSelectedRow() {
+  if (_selectedTxIndex < 0 || _selectedTxIndex >= _rawTransactions.length) {
+    alert("No row selected to delete.");
+    return;
+  }
+
+  if (!confirm("Are you sure you want to delete this row?")) return;
+
+  _rawTransactions.splice(_selectedTxIndex, 1);
+  if (_selectedTxIndex >= _rawTransactions.length) {
+    _selectedTxIndex = _rawTransactions.length - 1;
+  }
+
+  const query = (document.getElementById('tx-search-box').value || '');
+  applyTxSearchFilter(query);
+  renderTxTableBody();
+  if (_selectedTxIndex >= 0) {
+    selectTxRow(_selectedTxIndex);
+  } else {
+    populateRowEditorInputs();
+  }
+}
+
+function addNewTxRow() {
+  const newTx = {};
+  _colKeys.forEach(k => { newTx[k] = ""; });
+  newTx["Source"] = "Manual Entry";
+  _rawTransactions.push(newTx);
+
+  const query = (document.getElementById('tx-search-box').value || '');
+  applyTxSearchFilter(query);
+  _selectedTxIndex = _rawTransactions.length - 1;
+  renderTxTableBody();
+  selectTxRow(_selectedTxIndex);
+
+  // Switch to Edit Row tab and focus first input
+  switchTxTab('row');
+  const firstInp = document.getElementById('tx-row-input-0');
+  if (firstInp) firstInp.focus();
+}
+
+function applyTxHeaderNames() {
+  _colKeys.forEach((k, idx) => {
+    const inp = document.getElementById(`tx-header-input-${idx}`);
+    if (inp) {
+      const newName = inp.value.trim();
+      _colHeaders[idx] = newName || `Column ${idx + 1}`;
+    }
+  });
+
+  renderTxTableHeaders();
+  populateRowEditorInputs();
+  alert("Column header names successfully applied.");
+}
+
+function sortTxColumn(colKey) {
+  if (_isColResizing) return;
+
+  if (_currentSortCol === colKey) {
+    if (_sortDirection === 'asc') {
+      _sortDirection = 'desc';
+    } else if (_sortDirection === 'desc') {
+      // 3rd click: Reset sort to initial extraction order!
+      _currentSortCol = null;
+      _sortDirection = null;
+    }
+  } else {
+    _currentSortCol = colKey;
+    _sortDirection = 'asc';
+  }
+
+  if (_sortDirection === null) {
+    // Reset to initial extraction order
+    _filteredTransactions.sort((a, b) => a.origIdx - b.origIdx);
+  } else {
+    _filteredTransactions.sort((a, b) => {
+      let valA = (colKey === 'Source') ? (a.tx['Source'] || '').split(/[\\/]/).pop() : (a.tx[colKey] ?? '');
+      let valB = (colKey === 'Source') ? (b.tx['Source'] || '').split(/[\\/]/).pop() : (b.tx[colKey] ?? '');
+
+      const numA = typeof valA === 'number' ? valA : parseFloat(String(valA).replace(/,/g, ''));
+      const numB = typeof valB === 'number' ? valB : parseFloat(String(valB).replace(/,/g, ''));
+
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return (_sortDirection === 'asc') ? (numA - numB) : (numB - numA);
+      }
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+      return (_sortDirection === 'asc') ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+  }
+
+  renderTxTableHeaders();
+  renderTxTableBody();
+  if (_selectedTxIndex >= 0) {
+    selectTxRow(_selectedTxIndex);
+  }
+}
+
+function cleanJsAmount(val) {
+  if (val === null || val === undefined) return null;
+  const s = String(val).replace(/,/g, '').trim();
+  if (!s) return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function updateAccountingSummary() {
+  // DR, CR, NET metrics removed per user request
+}
+
+async function exportTransactionsToExcel() {
+  if (!_rawTransactions || _rawTransactions.length === 0) {
+    alert("No transactions to export.");
+    return;
+  }
+
+  const consolidate = document.getElementById('tx-chk-consolidate').checked;
+
+  const renameDict = {};
+  _colKeys.forEach((k, idx) => {
+    renameDict[k] = _colHeaders[idx] || `Column ${idx + 1}`;
+  });
+
+  const cleanData = _rawTransactions.map(tx => {
+    const row = {};
+    _colKeys.forEach(k => {
+      row[k] = tx[k] ?? '';
+    });
+    row['Source'] = tx['Source'] || 'Transactions';
+    return row;
+  });
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.export_bank_transactions_dialog) {
+    const res = await window.pywebview.api.export_bank_transactions_dialog(
+      cleanData, consolidate, "Bank_Transactions.xlsx", renameDict
+    );
+    if (res && res.success) {
+      alert(`✓ Successfully exported ${res.count} transactions to:\n${res.path}`);
+      closeTransactionModal();
+    } else if (res && res.error) {
+      alert(`Export Failed: ${res.error}`);
+    }
+  }
+}
+
+// =========================================================================
+// 2. NATIVE HTML5 CANVAS PDF AREA SELECTOR IMPLEMENTATION (EXACT REPLICA)
+// =========================================================================
+let _areaState = {
+  pdfFiles: [],
+  activeFile: null,
+  pageIndex: 0,
+  totalPages: 1,
+  zoom: 1.0,
+  drawMode: 'box', // 'box', 'col', 'row'
+  allCropRects: {}, // { [normPath]: { [pageIdx]: [ { rect: (x0,y0,x1,y1), cols: [], rows: [], origin: 'user'|'auto', user_modified: true } ] | 'skip' } }
+  imgObj: null,
+  imgInfo: null,
+  // Interaction State
+  isMouseDown: false,
+  startPos: null,
+  isDrawingBox: false,
+  rubberRect: null,
+  resizingBoxIdx: null,
+  resizingHandle: null,
+  dragStartBoxRect: null
+};
+
+function normalizeAreaPath(p) {
+  return (p || '').replace(/\\/g, '/').toLowerCase();
+}
+
+async function openWebAreaSelector() {
+  const st = window.VERTEX_STATE.bank_converter;
+  if (!st.selectedFiles || st.selectedFiles.length === 0) {
+    alert("Please select at least one bank statement file before opening extraction area.");
+    return;
+  }
+
+  const pdfFiles = st.selectedFiles.filter(f => f.toLowerCase().endsWith('.pdf'));
+  if (pdfFiles.length === 0) {
+    alert("No PDF statement files selected. Area selection is only applicable to PDF statements.");
+    return;
+  }
+
+  _areaState.pdfFiles = pdfFiles;
+  _areaState.activeFile = pdfFiles[0];
+  _areaState.pageIndex = 0;
+  _areaState.drawMode = 'box';
+  _areaState.resizingBoxIdx = null;
+  _areaState.resizingHandle = null;
+
+  // Deep clone existing crop rects
+  _areaState.allCropRects = {};
+  if (st.cropRects && typeof st.cropRects === 'object') {
+    for (const [k, v] of Object.entries(st.cropRects)) {
+      _areaState.allCropRects[normalizeAreaPath(k)] = JSON.parse(JSON.stringify(v));
+    }
+  }
+
+  const modal = document.getElementById('area-selector-modal');
+  if (modal) modal.style.display = 'flex';
+
+  const chkProp = document.getElementById('chk-auto-propagate');
+  if (chkProp) chkProp.checked = false;
+
+  renderAreaFileList();
+  setAreaDrawMode('box');
+  await loadAreaPdfInfo();
+  await renderAreaPage();
+  requestAnimationFrame(() => {
+    areaZoomFitHeight();
+    renderAreaCanvas();
+  });
+}
+
+function closeAreaSelector() {
+  const modal = document.getElementById('area-selector-modal');
+  if (modal) modal.style.display = 'none';
+  renderBankConverterState();
+}
+
+function saveAreaSelector() {
+  const st = window.VERTEX_STATE.bank_converter;
+  
+  // Persist current active file rects
+  const activeKey = normalizeAreaPath(_areaState.activeFile);
+  st.cropRects = {};
+  for (const [normP, pageDict] of Object.entries(_areaState.allCropRects)) {
+    // Map back to original filePath
+    const origFile = _areaState.pdfFiles.find(f => normalizeAreaPath(f) === normP) || normP;
+    st.cropRects[origFile] = JSON.parse(JSON.stringify(pageDict));
+  }
+
+  // Count active boxes and skipped pages
+  let activeCount = 0;
+  let skippedCount = 0;
+  for (const fp in st.cropRects) {
+    const fileRects = st.cropRects[fp];
+    for (const p in fileRects) {
+      const v = fileRects[p];
+      if (v === 'skip') skippedCount++;
+      else if (Array.isArray(v)) activeCount += v.filter(b => b && b.rect).length;
+      else if (v && typeof v === 'object' && v.rect) activeCount++;
+    }
+  }
+
+  const parts = [];
+  if (activeCount > 0) parts.push(`${activeCount} boxes drawn`);
+  if (skippedCount > 0) parts.push(`${skippedCount} pages skipped`);
+
+  st.cropStatusText = parts.length > 0
+    ? `Extraction Area Selection: ACTIVE (${parts.join(', ')})`
+    : "Extraction Area Selection: None (Parses whole document)";
+
+  closeAreaSelector();
+}
+
+function renderAreaFileList() {
+  const container = document.getElementById('area-file-list');
+  if (!container) return;
+
+  container.innerHTML = _areaState.pdfFiles.map(filePath => {
+    const fileName = filePath.split(/[\\/]/).pop();
+    const isActive = filePath === _areaState.activeFile;
+    return `
+      <button class="area-file-btn ${isActive ? 'active' : ''}" 
+              title="${filePath}" 
+              onclick="switchAreaFile('${filePath.replace(/\\/g, '\\\\')}')">
+        📄 ${fileName}
+      </button>
+    `;
+  }).join('');
+}
+
+async function switchAreaFile(targetPath) {
+  if (targetPath === _areaState.activeFile) return;
+
+  _areaState.activeFile = targetPath;
+  _areaState.pageIndex = 0;
+  renderAreaFileList();
+  await loadAreaPdfInfo();
+  await renderAreaPage();
+  requestAnimationFrame(() => {
+    areaZoomFitHeight();
+    renderAreaCanvas();
+  });
+}
+
+async function loadAreaPdfInfo() {
+  const st = window.VERTEX_STATE.bank_converter;
+  const pwd = st.pwd || '';
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_pdf_info) {
+    try {
+      const res = await window.pywebview.api.get_pdf_info(_areaState.activeFile, pwd);
+      if (res && res.success) {
+        _areaState.totalPages = res.total_pages || 1;
+      }
+    } catch(e) {
+      console.error("Failed to load PDF info:", e);
+      _areaState.totalPages = 1;
+    }
+  }
+}
+
+function getActiveFileCropDict() {
+  const key = normalizeAreaPath(_areaState.activeFile);
+  if (!_areaState.allCropRects[key]) {
+    _areaState.allCropRects[key] = {};
+  }
+  return _areaState.allCropRects[key];
+}
+
+function getCurrentPageBoxes() {
+  const cropDict = getActiveFileCropDict();
+  const val = cropDict[_areaState.pageIndex];
+  if (!val || val === 'skip') return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'object' && val.rect) return [val];
+  return [];
+}
+
+async function renderAreaPage() {
+  const pIdx = _areaState.pageIndex;
+  const tot = _areaState.totalPages;
+
+  // Update Navigation Bar
+  const btnPrev = document.getElementById('area-btn-prev');
+  const btnNext = document.getElementById('area-btn-next');
+  const btnCopyPrev = document.getElementById('area-btn-copy-prev');
+  const pageLbl = document.getElementById('area-page-label');
+
+  if (btnPrev) btnPrev.disabled = (pIdx <= 0);
+  if (btnNext) btnNext.disabled = (pIdx >= tot - 1);
+  if (btnCopyPrev) btnCopyPrev.disabled = (pIdx <= 0);
+  if (pageLbl) pageLbl.innerText = `Page ${pIdx + 1} of ${tot}`;
+
+  // Update Skip Page Checkbox
+  const cropDict = getActiveFileCropDict();
+  const isSkipped = cropDict[pIdx] === 'skip';
+  const chkSkip = document.getElementById('chk-skip-page');
+  if (chkSkip) chkSkip.checked = isSkipped;
+
+  // Show Loading Spinner
+  const spinner = document.getElementById('area-loading-spinner');
+  if (spinner) spinner.style.display = 'flex';
+
+  const st = window.VERTEX_STATE.bank_converter;
+  const pwd = st.pwd || '';
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_pdf_page_render) {
+    try {
+      const res = await window.pywebview.api.get_pdf_page_render(_areaState.activeFile, pIdx, pwd, 1.5);
+      if (res && res.success && res.image) {
+        _areaState.imgInfo = res;
+        const img = new Image();
+        img.onload = () => {
+          _areaState.imgObj = img;
+          if (spinner) spinner.style.display = 'none';
+          renderAreaCanvas();
+        };
+        img.src = res.image;
+      } else {
+        if (spinner) spinner.style.display = 'none';
+      }
+    } catch(e) {
+      if (spinner) spinner.style.display = 'none';
+      console.error(e);
+    }
+  }
+}
+
+function renderAreaCanvas() {
+  const canvas = document.getElementById('area-pdf-canvas');
+  if (!canvas || !_areaState.imgObj || !_areaState.imgInfo) return;
+
+  const cropDict = getActiveFileCropDict();
+  const isSkipped = cropDict[_areaState.pageIndex] === 'skip';
+  const wm = document.getElementById('area-skip-watermark');
+  if (wm) wm.style.display = isSkipped ? 'block' : 'none';
+
+  const z = _areaState.zoom;
+  const dispW = Math.round(_areaState.imgInfo.width * z);
+  const dispH = Math.round(_areaState.imgInfo.height * z);
+
+  canvas.width = dispW;
+  canvas.height = dispH;
+
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(_areaState.imgObj, 0, 0, dispW, dispH);
+
+  if (isSkipped) {
+    ctx.fillStyle = 'rgba(100, 100, 100, 0.45)';
+    ctx.fillRect(0, 0, dispW, dispH);
+    return;
+  }
+
+  const boxes = getCurrentPageBoxes();
+  boxes.forEach((b, idx) => {
+    if (!b || !b.rect) return;
+    const isUser = b.user_modified || b.origin === 'user';
+    const boxColor = isUser ? '#10B981' : '#FF0033';
+    const fillColor = isUser ? 'rgba(16, 185, 129, 0.14)' : 'rgba(255, 0, 51, 0.14)';
+
+    const c_x0 = b.rect[0] * dispW;
+    const c_y0 = b.rect[1] * dispH;
+    const c_x1 = b.rect[2] * dispW;
+    const c_y1 = b.rect[3] * dispH;
+    const rw = c_x1 - c_x0;
+    const rh = c_y1 - c_y0;
+
+    // Translucent box fill & border
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(c_x0, c_y0, rw, rh);
+
+    ctx.strokeStyle = boxColor;
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(c_x0, c_y0, rw, rh);
+
+    // Vertical Column Splitters (dashed lines)
+    if (b.cols && Array.isArray(b.cols)) {
+      ctx.strokeStyle = boxColor;
+      ctx.lineWidth = 2.0;
+      ctx.setLineDash([8, 4]);
+      b.cols.forEach(c => {
+        const cx = c * dispW;
+        if (cx > c_x0 + 2 && cx < c_x1 - 2) {
+          ctx.beginPath();
+          ctx.moveTo(cx, c_y0);
+          ctx.lineTo(cx, c_y1);
+          ctx.stroke();
+        }
+      });
+      ctx.setLineDash([]);
+    }
+
+    // Horizontal Row Splitters (dashed lines)
+    if (b.rows && Array.isArray(b.rows)) {
+      ctx.strokeStyle = boxColor;
+      ctx.lineWidth = 2.0;
+      ctx.setLineDash([8, 4]);
+      b.rows.forEach(r => {
+        const cy = r * dispH;
+        if (cy > c_y0 + 2 && cy < c_y1 - 2) {
+          ctx.beginPath();
+          ctx.moveTo(c_x0, cy);
+          ctx.lineTo(c_x1, cy);
+          ctx.stroke();
+        }
+      });
+      ctx.setLineDash([]);
+    }
+
+    // Top-Right Corner Close Button ✕ (matches original AreaSelector)
+    ctx.beginPath();
+    ctx.arc(c_x1, c_y0, 10, 0, Math.PI * 2);
+    ctx.fillStyle = boxColor;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.stroke();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✕', c_x1, c_y0);
+
+    // 7 Resize Handles: nw, n, e, se, s, sw, w (excluding top-right where ✕ sits)
+    const midX = (c_x0 + c_x1) / 2;
+    const midY = (c_y0 + c_y1) / 2;
+    const handles = [
+      [c_x0, c_y0], [midX, c_y0],
+      [c_x1, midY], [c_x1, c_y1],
+      [midX, c_y1], [c_x0, c_y1],
+      [c_x0, midY]
+    ];
+
+    handles.forEach(([hx, hy]) => {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(hx - 5, hy - 5, 10, 10);
+      ctx.strokeStyle = boxColor;
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(hx - 5, hy - 5, 10, 10);
+    });
+  });
+
+  // Actively drawing rubber band
+  if (_areaState.isDrawingBox && _areaState.rubberRect) {
+    ctx.strokeStyle = '#10B981';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 3]);
+    ctx.strokeRect(_areaState.rubberRect.x, _areaState.rubberRect.y, _areaState.rubberRect.w, _areaState.rubberRect.h);
+    ctx.setLineDash([]);
+  }
+}
+
+// Navigation & Zoom
+function areaPrevPage() {
+  if (_areaState.pageIndex > 0) {
+    _areaState.pageIndex--;
+    renderAreaPage();
+  }
+}
+
+function areaNextPage() {
+  if (_areaState.pageIndex < _areaState.totalPages - 1) {
+    _areaState.pageIndex++;
+    renderAreaPage();
+  }
+}
+
+function areaZoomIn() {
+  _areaState.zoom = Math.min(4.0, _areaState.zoom * 1.2);
+  renderAreaCanvas();
+}
+
+function areaZoomOut() {
+  _areaState.zoom = Math.max(0.3, _areaState.zoom / 1.2);
+  renderAreaCanvas();
+}
+
+function areaZoomFitHeight() {
+  const viewport = document.getElementById('area-canvas-scroll');
+  if (viewport && _areaState.imgInfo && _areaState.imgInfo.height > 0) {
+    const targetH = Math.max(100, viewport.clientHeight - 32);
+    _areaState.zoom = Math.max(0.4, Math.min(3.0, targetH / _areaState.imgInfo.height));
+    renderAreaCanvas();
+  }
+}
+
+// Drawing Modes
+function setAreaDrawMode(mode) {
+  if (mode === 'col' || mode === 'row') {
+    const boxes = getCurrentPageBoxes();
+    if (!boxes || boxes.length === 0) {
+      alert(`Please draw or auto-detect a Table Box first before placing ${mode === 'col' ? 'Column' : 'Row'} lines.`);
+      return;
+    }
+  }
+
+  _areaState.drawMode = mode;
+  ['box', 'col', 'row'].forEach(m => {
+    const btn = document.getElementById(`tb-mode-${m}`);
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
+}
+
+// Hit-testing helpers
+function getCanvasCoords(e) {
+  const canvas = document.getElementById('area-pdf-canvas');
+  if (!canvas) return { x: 0, y: 0 };
+  const rect = canvas.getBoundingClientRect();
+  if (!rect || rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+function findHitElement(x, y, dispW, dispH, boxes) {
+  const canvas = document.getElementById('area-pdf-canvas');
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  // Dynamic hit tolerances: ~16 screen pixels for handles and ~12 screen pixels for edges
+  const handleTol = Math.max(22, 16 * Math.max(scaleX, scaleY));
+  const edgeTol = Math.max(16, 12 * Math.max(scaleX, scaleY));
+
+  for (let idx = boxes.length - 1; idx >= 0; idx--) {
+    const b = boxes[idx];
+    if (!b || !b.rect) continue;
+    const c_x0 = b.rect[0] * dispW;
+    const c_y0 = b.rect[1] * dispH;
+    const c_x1 = b.rect[2] * dispW;
+    const c_y1 = b.rect[3] * dispH;
+    const midX = (c_x0 + c_x1) / 2;
+    const midY = (c_y0 + c_y1) / 2;
+
+    // 1. Close ✕ button at top-right (c_x1, c_y0)
+    if (Math.hypot(x - c_x1, y - c_y0) <= handleTol * 1.3) {
+      return { type: 'close', boxIdx: idx };
+    }
+
+    // 2. Corner Handles: nw, se, sw (ne is reserved for close ✕ button)
+    if (Math.hypot(x - c_x0, y - c_y0) <= handleTol) return { type: 'handle', boxIdx: idx, handle: 'nw' };
+    if (Math.hypot(x - c_x1, y - c_y1) <= handleTol) return { type: 'handle', boxIdx: idx, handle: 'se' };
+    if (Math.hypot(x - c_x0, y - c_y1) <= handleTol) return { type: 'handle', boxIdx: idx, handle: 'sw' };
+
+    // 3. Midpoint Handles: n, s, w, e
+    if (Math.hypot(x - midX, y - c_y0) <= handleTol) return { type: 'handle', boxIdx: idx, handle: 'n' };
+    if (Math.hypot(x - midX, y - c_y1) <= handleTol) return { type: 'handle', boxIdx: idx, handle: 's' };
+    if (Math.hypot(x - c_x0, y - midY) <= handleTol) return { type: 'handle', boxIdx: idx, handle: 'w' };
+    if (Math.hypot(x - c_x1, y - midY) <= handleTol) return { type: 'handle', boxIdx: idx, handle: 'e' };
+
+    // 4. Edges / Borders: Allow grabbing ANYWHERE on the 4 border lines to resize!
+    // Bottom border (drag down or up to resize height)
+    if (Math.abs(y - c_y1) <= edgeTol && x >= c_x0 - edgeTol && x <= c_x1 + edgeTol) {
+      return { type: 'handle', boxIdx: idx, handle: 's' };
+    }
+    // Top border
+    if (Math.abs(y - c_y0) <= edgeTol && x >= c_x0 - edgeTol && x <= c_x1 - handleTol) {
+      return { type: 'handle', boxIdx: idx, handle: 'n' };
+    }
+    // Left border
+    if (Math.abs(x - c_x0) <= edgeTol && y >= c_y0 - edgeTol && y <= c_y1 + edgeTol) {
+      return { type: 'handle', boxIdx: idx, handle: 'w' };
+    }
+    // Right border
+    if (Math.abs(x - c_x1) <= edgeTol && y >= c_y0 + handleTol && y <= c_y1 + edgeTol) {
+      return { type: 'handle', boxIdx: idx, handle: 'e' };
+    }
+
+    // 5. Inside Box (Move box if in 'box' mode)
+    if (x > c_x0 + edgeTol && x < c_x1 - edgeTol && y > c_y0 + edgeTol && y < c_y1 - edgeTol) {
+      return { type: 'inside', boxIdx: idx };
+    }
+  }
+  return null;
+}
+
+function deleteBoxByIndex(index) {
+  const cropDict = getActiveFileCropDict();
+  const boxes = getCurrentPageBoxes();
+  if (index >= 0 && index < boxes.length) {
+    boxes.splice(index, 1);
+    if (boxes.length === 0) {
+      delete cropDict[_areaState.pageIndex];
+    } else {
+      cropDict[_areaState.pageIndex] = boxes;
+    }
+    renderAreaCanvas();
+  }
+}
+
+// Canvas Mouse Event Listeners
+const areaCanvas = document.getElementById('area-pdf-canvas');
+
+function onAreaCanvasMouseMove(e) {
+  const coords = getCanvasCoords(e);
+  const w = areaCanvas.width;
+  const h = areaCanvas.height;
+  const boxes = getCurrentPageBoxes();
+
+  // 1. If currently dragging a resize handle or edge
+  if (_areaState.resizingBoxIdx !== null && _areaState.resizingHandle) {
+    const handle = _areaState.resizingHandle;
+    const b = boxes[_areaState.resizingBoxIdx];
+    if (b && _areaState.dragStartBoxRect) {
+      const cur_x_rel = Math.max(0, Math.min(coords.x / w, 1.0));
+      const cur_y_rel = Math.max(0, Math.min(coords.y / h, 1.0));
+      let [new_x0, new_y0, new_x1, new_y1] = _areaState.dragStartBoxRect;
+
+      if (handle.includes('w')) new_x0 = Math.min(cur_x_rel, new_x1 - 0.01);
+      if (handle.includes('e')) new_x1 = Math.max(cur_x_rel, new_x0 + 0.01);
+      if (handle.includes('n')) new_y0 = Math.min(cur_y_rel, new_y1 - 0.01);
+      if (handle.includes('s')) new_y1 = Math.max(cur_y_rel, new_y0 + 0.01);
+
+      b.rect = [
+        Math.round(Math.max(0.0, Math.min(new_x0, 0.99)) * 10000) / 10000,
+        Math.round(Math.max(0.0, Math.min(new_y0, 0.99)) * 10000) / 10000,
+        Math.round(Math.max(0.01, Math.min(new_x1, 1.0)) * 10000) / 10000,
+        Math.round(Math.max(0.01, Math.min(new_y1, 1.0)) * 10000) / 10000
+      ];
+      renderAreaCanvas();
+    }
+    return;
+  }
+
+  // 2. If currently moving an entire box
+  if (_areaState.isMovingBox && _areaState.movingBoxIdx !== null) {
+    const b = boxes[_areaState.movingBoxIdx];
+    if (b && _areaState.dragStartBoxRect && _areaState.moveStartPos) {
+      const dx_rel = (coords.x - _areaState.moveStartPos.x) / w;
+      const dy_rel = (coords.y - _areaState.moveStartPos.y) / h;
+      let [x0, y0, x1, y1] = _areaState.dragStartBoxRect;
+      const bw = x1 - x0;
+      const bh = y1 - y0;
+      let nx0 = Math.max(0, Math.min(x0 + dx_rel, 1.0 - bw));
+      let ny0 = Math.max(0, Math.min(y0 + dy_rel, 1.0 - bh));
+      b.rect = [
+        Math.round(nx0 * 10000) / 10000,
+        Math.round(ny0 * 10000) / 10000,
+        Math.round((nx0 + bw) * 10000) / 10000,
+        Math.round((ny0 + bh) * 10000) / 10000
+      ];
+      renderAreaCanvas();
+    }
+    return;
+  }
+
+  // 3. If drawing rubber band box
+  if (_areaState.isDrawingBox && _areaState.startPos) {
+    const rx = Math.min(_areaState.startPos.x, coords.x);
+    const ry = Math.min(_areaState.startPos.y, coords.y);
+    const rw = Math.abs(coords.x - _areaState.startPos.x);
+    const rh = Math.abs(coords.y - _areaState.startPos.y);
+    _areaState.rubberRect = { x: rx, y: ry, w: rw, h: rh };
+    renderAreaCanvas();
+    return;
+  }
+
+  // 4. Hover cursor update
+  const hit = findHitElement(coords.x, coords.y, w, h, boxes);
+  if (hit) {
+    if (hit.type === 'close') {
+      areaCanvas.style.cursor = 'pointer';
+    } else if (hit.type === 'handle') {
+      const cursorMap = {
+        'nw': 'nwse-resize', 'se': 'nwse-resize',
+        'sw': 'nesw-resize', 'ne': 'nesw-resize',
+        'n': 'ns-resize', 's': 'ns-resize',
+        'e': 'ew-resize', 'w': 'ew-resize'
+      };
+      areaCanvas.style.cursor = cursorMap[hit.handle] || 'crosshair';
+    } else if (hit.type === 'inside') {
+      if (_areaState.drawMode === 'box') {
+        areaCanvas.style.cursor = 'move';
+      } else {
+        areaCanvas.style.cursor = 'crosshair';
+      }
+    }
+  } else {
+    areaCanvas.style.cursor = 'crosshair';
+  }
+}
+
+areaCanvas.addEventListener('mousemove', onAreaCanvasMouseMove);
+
+areaCanvas.addEventListener('mousedown', (e) => {
+  const coords = getCanvasCoords(e);
+  const w = areaCanvas.width;
+  const h = areaCanvas.height;
+  const cropDict = getActiveFileCropDict();
+
+  // If page was skipped, clicking un-skips it
+  if (cropDict[_areaState.pageIndex] === 'skip') {
+    delete cropDict[_areaState.pageIndex];
+    const chk = document.getElementById('chk-skip-page');
+    if (chk) chk.checked = false;
+    renderAreaCanvas();
+  }
+
+  const boxes = getCurrentPageBoxes();
+  const hit = findHitElement(coords.x, coords.y, w, h, boxes);
+
+  // Close button click
+  if (hit && hit.type === 'close') {
+    deleteBoxByIndex(hit.boxIdx);
+    return;
+  }
+
+  // Resize handle OR Edge click
+  if (hit && hit.type === 'handle') {
+    _areaState.resizingBoxIdx = hit.boxIdx;
+    _areaState.resizingHandle = hit.handle;
+    _areaState.dragStartBoxRect = [...boxes[hit.boxIdx].rect];
+    return;
+  }
+
+  // Inside Box click: Move box if in 'box' mode
+  if (hit && hit.type === 'inside' && _areaState.drawMode === 'box') {
+    _areaState.isMovingBox = true;
+    _areaState.movingBoxIdx = hit.boxIdx;
+    _areaState.moveStartPos = coords;
+    _areaState.dragStartBoxRect = [...boxes[hit.boxIdx].rect];
+    return;
+  }
+
+  // DRAW MODE: COLUMN
+  if (_areaState.drawMode === 'col') {
+    const matchingBox = boxes.find(b => {
+      const rx0 = b.rect[0] * w;
+      const ry0 = b.rect[1] * h;
+      const rx1 = b.rect[2] * w;
+      const ry1 = b.rect[3] * h;
+      return coords.x >= rx0 && coords.x <= rx1 && coords.y >= ry0 && coords.y <= ry1;
+    });
+
+    if (!matchingBox) {
+      alert("Column lines must be placed inside a drawn Table Box.");
+      return;
+    }
+
+    matchingBox.cols = matchingBox.cols || [];
+    const nearIdx = matchingBox.cols.findIndex(c => Math.abs(c * w - coords.x) < 8);
+    if (nearIdx >= 0) {
+      matchingBox.cols.splice(nearIdx, 1);
+    } else {
+      matchingBox.cols.push(Math.round((coords.x / w) * 10000) / 10000);
+      matchingBox.cols.sort((a,b) => a-b);
+    }
+    matchingBox.origin = 'user';
+    matchingBox.user_modified = true;
+    renderAreaCanvas();
+    const chk = document.getElementById('chk-auto-propagate');
+    if (chk && chk.checked) {
+      propagateTuningForward();
+    }
+    return;
+  }
+
+  // DRAW MODE: ROW
+  if (_areaState.drawMode === 'row') {
+    const matchingBox = boxes.find(b => {
+      const rx0 = b.rect[0] * w;
+      const ry0 = b.rect[1] * h;
+      const rx1 = b.rect[2] * w;
+      const ry1 = b.rect[3] * h;
+      return coords.x >= rx0 && coords.x <= rx1 && coords.y >= ry0 && coords.y <= ry1;
+    });
+
+    if (!matchingBox) {
+      alert("Row lines must be placed inside a drawn Table Box.");
+      return;
+    }
+
+    matchingBox.rows = matchingBox.rows || [];
+    const nearIdx = matchingBox.rows.findIndex(r => Math.abs(r * h - coords.y) < 8);
+    if (nearIdx >= 0) {
+      matchingBox.rows.splice(nearIdx, 1);
+    } else {
+      matchingBox.rows.push(Math.round((coords.y / h) * 10000) / 10000);
+      matchingBox.rows.sort((a,b) => a-b);
+    }
+    matchingBox.origin = 'user';
+    matchingBox.user_modified = true;
+    renderAreaCanvas();
+    const chk = document.getElementById('chk-auto-propagate');
+    if (chk && chk.checked) {
+      propagateTuningForward();
+    }
+    return;
+  }
+
+  // DRAW MODE: BOX
+  _areaState.isDrawingBox = true;
+  _areaState.startPos = coords;
+  _areaState.rubberRect = { x: coords.x, y: coords.y, w: 0, h: 0 };
+});
+
+if (window._bankConverterMouseMoveHandler) {
+  window.removeEventListener('mousemove', window._bankConverterMouseMoveHandler);
+}
+
+window._bankConverterMouseMoveHandler = function(e) {
+  if (_areaState.resizingBoxIdx !== null || _areaState.isMovingBox || _areaState.isDrawingBox) {
+    onAreaCanvasMouseMove(e);
+  }
+};
+window.addEventListener('mousemove', window._bankConverterMouseMoveHandler);
+
+if (window._bankConverterMouseUpHandler) {
+  window.removeEventListener('mouseup', window._bankConverterMouseUpHandler);
+}
+
+window._bankConverterMouseUpHandler = function() {
+  // Finish Resizing
+  if (_areaState.resizingBoxIdx !== null) {
+    const boxes = getCurrentPageBoxes();
+    const b = boxes[_areaState.resizingBoxIdx];
+    if (b) {
+      const [rx0, ry0, rx1, ry1] = b.rect;
+      if (b.cols) b.cols = b.cols.filter(c => c > rx0 + 0.003 && c < rx1 - 0.003);
+      if (b.rows) b.rows = b.rows.filter(r => r > ry0 + 0.003 && r < ry1 - 0.003);
+      b.origin = 'user';
+      b.user_modified = true;
+    }
+    _areaState.resizingBoxIdx = null;
+    _areaState.resizingHandle = null;
+    _areaState.dragStartBoxRect = null;
+    renderAreaCanvas();
+    const chk = document.getElementById('chk-auto-propagate');
+    if (chk && chk.checked) {
+      propagateTuningForward();
+    }
+    return;
+  }
+
+  // Finish Moving
+  if (_areaState.isMovingBox) {
+    const boxes = getCurrentPageBoxes();
+    const b = (_areaState.movingBoxIdx !== null) ? boxes[_areaState.movingBoxIdx] : null;
+    if (b) {
+      b.origin = 'user';
+      b.user_modified = true;
+    }
+    _areaState.isMovingBox = false;
+    _areaState.movingBoxIdx = null;
+    _areaState.moveStartPos = null;
+    _areaState.dragStartBoxRect = null;
+    renderAreaCanvas();
+    const chk = document.getElementById('chk-auto-propagate');
+    if (chk && chk.checked) {
+      propagateTuningForward();
+    }
+    return;
+  }
+
+  // Finish Drawing Rubber Band Box
+  if (_areaState.isDrawingBox && _areaState.rubberRect) {
+    const r = _areaState.rubberRect;
+    const w = areaCanvas.width;
+    const h = areaCanvas.height;
+    _areaState.isDrawingBox = false;
+    _areaState.rubberRect = null;
+
+    if (r.w > 12 && r.h > 12) {
+      const nx0 = Math.round((r.x / w) * 10000) / 10000;
+      const ny0 = Math.round((r.y / h) * 10000) / 10000;
+      const nx1 = Math.round(((r.x + r.w) / w) * 10000) / 10000;
+      const ny1 = Math.round(((r.y + r.h) / h) * 10000) / 10000;
+
+      const cropDict = getActiveFileCropDict();
+      if (!Array.isArray(cropDict[_areaState.pageIndex])) {
+        cropDict[_areaState.pageIndex] = [];
+      }
+      cropDict[_areaState.pageIndex].push({
+        rect: [nx0, ny0, nx1, ny1],
+        cols: [],
+        rows: [],
+        origin: 'user',
+        user_modified: true
+      });
+
+      const chk = document.getElementById('chk-auto-propagate');
+      if (chk && chk.checked) {
+        propagateTuningForward();
+      }
+    }
+    renderAreaCanvas();
+  }
+};
+
+window.addEventListener('mouseup', window._bankConverterMouseUpHandler);
+
+window.cleanupCurrentPage = function() {
+  if (window._bankConverterMouseMoveHandler) {
+    window.removeEventListener('mousemove', window._bankConverterMouseMoveHandler);
+    window._bankConverterMouseMoveHandler = null;
+  }
+  if (window._bankConverterMouseUpHandler) {
+    window.removeEventListener('mouseup', window._bankConverterMouseUpHandler);
+    window._bankConverterMouseUpHandler = null;
+  }
+};
+
+// Canvas Mouse Wheel Controls (Zoom with Ctrl, Scroll with Shift/Normal)
+const canvasViewport = document.getElementById('area-canvas-scroll');
+if (canvasViewport) {
+  canvasViewport.addEventListener('wheel', (e) => {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      if (e.deltaY < 0) areaZoomIn();
+      else areaZoomOut();
+    } else if (e.shiftKey) {
+      e.preventDefault();
+      canvasViewport.scrollLeft += e.deltaY;
+    }
+  }, { passive: false });
+}
+
+// Auto Detection Logic
+async function areaAutoDetectCurrentPage() {
+  const overlay = document.getElementById('area-autodetect-overlay');
+  const msgLbl = document.getElementById('area-autodetect-msg');
+  const bar = document.getElementById('area-autodetect-bar');
+
+  if (overlay) overlay.style.display = 'flex';
+  if (msgLbl) msgLbl.innerText = `Detecting Page ${_areaState.pageIndex + 1} of ${_areaState.totalPages}...`;
+  if (bar) bar.style.width = '50%';
+
+  const cropDict = getActiveFileCropDict();
+  let refBox = null;
+  let userTemplatePage = -1;
+
+  // Look for latest preceding user-modified template
+  for (let m = _areaState.pageIndex - 1; m >= 0; m--) {
+    const mb = cropDict[m];
+    if (mb && mb !== 'skip' && Array.isArray(mb) && mb.length > 0) {
+      if (mb[0].user_modified || mb[0].origin === 'user') {
+        refBox = mb[0];
+        userTemplatePage = m;
+        break;
+      }
+    }
+  }
+
+  const st = window.VERTEX_STATE.bank_converter;
+  const pwd = st.pwd || '';
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.auto_detect_page_boxes) {
+    try {
+      const res = await window.pywebview.api.auto_detect_page_boxes(_areaState.activeFile, _areaState.pageIndex, pwd, refBox);
+      if (overlay) overlay.style.display = 'none';
+
+      if (res && res.success && res.detected && res.detected.rect) {
+        cropDict[_areaState.pageIndex] = [res.detected];
+        const chkSkip = document.getElementById('chk-skip-page');
+        if (chkSkip) chkSkip.checked = false;
+        renderAreaCanvas();
+
+        if (document.getElementById('chk-auto-propagate').checked) {
+          propagateTuningForward();
+        }
+
+        const srcMsg = (res.source === 'adapted' && userTemplatePage >= 0)
+          ? `Table adapted from Page ${userTemplatePage + 1} user template`
+          : `Table detected on Page ${_areaState.pageIndex + 1}`;
+        const colN = (res.detected.cols || []).length;
+        const rowN = (res.detected.rows || []).length;
+        alert(`${srcMsg} with ${colN} columns and ${rowN} rows!\nYou can drag boundaries or add/remove rows & columns.`);
+      } else {
+        renderAreaCanvas();
+        alert(`Could not find a distinct transaction table on Page ${_areaState.pageIndex + 1}.\nYou can draw one manually with 'Draw Table'.`);
+      }
+    } catch(e) {
+      if (overlay) overlay.style.display = 'none';
+      alert(`Auto detection failed: ${e}`);
+    }
+  }
+}
+
+async function areaAutoDetectAllPages() {
+  const overlay = document.getElementById('area-autodetect-overlay');
+  const msgLbl = document.getElementById('area-autodetect-msg');
+  const bar = document.getElementById('area-autodetect-bar');
+
+  if (overlay) overlay.style.display = 'flex';
+  if (msgLbl) msgLbl.innerText = `Detecting tables across all ${_areaState.totalPages} pages...`;
+  if (bar) bar.style.width = '70%';
+
+  const cropDict = getActiveFileCropDict();
+  const st = window.VERTEX_STATE.bank_converter;
+  const pwd = st.pwd || '';
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.auto_detect_all_page_boxes) {
+    try {
+      const res = await window.pywebview.api.auto_detect_all_page_boxes(_areaState.activeFile, pwd, cropDict);
+      if (overlay) overlay.style.display = 'none';
+
+      if (res && res.success && res.results) {
+        for (const [p, boxes] of Object.entries(res.results)) {
+          cropDict[p] = boxes;
+        }
+        renderAreaCanvas();
+        alert(`Auto-detected / adapted tables on ${res.success_pages} of ${res.total_pages} pages.\nUser-tuned pages were strictly preserved.`);
+      } else {
+        alert("Auto detection complete.");
+      }
+    } catch(e) {
+      if (overlay) overlay.style.display = 'none';
+      alert(`Auto detection failed: ${e}`);
+    }
+  }
+}
+
+async function propagateTuningForward() {
+  const cropDict = getActiveFileCropDict();
+  const currentBoxes = cropDict[_areaState.pageIndex];
+  if (!currentBoxes || currentBoxes === 'skip' || !currentBoxes[0]) return;
+
+  const refBox = currentBoxes[0];
+  const st = window.VERTEX_STATE.bank_converter;
+  const pwd = st.pwd || '';
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.propagate_tuning_forward) {
+    try {
+      const res = await window.pywebview.api.propagate_tuning_forward(
+        _areaState.activeFile, _areaState.pageIndex, refBox, cropDict, pwd
+      );
+      if (res && res.success && res.propagated) {
+        for (const [p, boxes] of Object.entries(res.propagated)) {
+          const numP = parseInt(p, 10);
+          cropDict[p] = boxes;
+          cropDict[numP] = boxes;
+        }
+      }
+    } catch(e) {
+      console.error("Propagation error:", e);
+    }
+  }
+}
+
+async function onAutoPropagateToggle(checked) {
+  if (checked) {
+    const boxes = getCurrentPageBoxes();
+    if (boxes && boxes.length > 0) {
+      await propagateTuningForward();
+    }
+  }
+}
+
+// Page Actions
+function areaCopyPrevPage() {
+  if (_areaState.pageIndex <= 0) {
+    alert("This is the first page. There is no previous page to copy from.");
+    return;
+  }
+
+  const cropDict = getActiveFileCropDict();
+  const prevCrop = cropDict[_areaState.pageIndex - 1];
+  if (!prevCrop || prevCrop === 'skip' || prevCrop.length === 0) {
+    alert("The previous page does not have any Table Box selection.");
+    return;
+  }
+
+  cropDict[_areaState.pageIndex] = JSON.parse(JSON.stringify(prevCrop));
+  const chkSkip = document.getElementById('chk-skip-page');
+  if (chkSkip) chkSkip.checked = false;
+  renderAreaCanvas();
+}
+
+function areaToggleSkipPage(checked) {
+  const cropDict = getActiveFileCropDict();
+  if (checked) {
+    cropDict[_areaState.pageIndex] = 'skip';
+    setAreaDrawMode('box');
+  } else {
+    if (cropDict[_areaState.pageIndex] === 'skip') {
+      delete cropDict[_areaState.pageIndex];
+    }
+  }
+  renderAreaCanvas();
+}
+
+function areaClearCurrentPage() {
+  const cropDict = getActiveFileCropDict();
+  delete cropDict[_areaState.pageIndex];
+  const chkSkip = document.getElementById('chk-skip-page');
+  if (chkSkip) chkSkip.checked = false;
+  setAreaDrawMode('box');
+  renderAreaCanvas();
+}
+
+function areaClearAllPages() {
+  const key = normalizeAreaPath(_areaState.activeFile);
+  _areaState.allCropRects[key] = {};
+  const chkSkip = document.getElementById('chk-skip-page');
+  if (chkSkip) chkSkip.checked = false;
+  setAreaDrawMode('box');
+  renderAreaCanvas();
+}
+
+renderBankConverterState();
+</script>
